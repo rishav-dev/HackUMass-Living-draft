@@ -1,0 +1,15 @@
+{
+  "name": "@living-draft/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local text engine: reading copies, time clues, people, emotions, matching, version comparison and grounded answers.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "eval": "tsx eval/run.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

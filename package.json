@@ -1,0 +1,43 @@
+{
+  "name": "living-draft",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A private, voice-first life storybook. Record memories in any order and watch them find their place.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c magenta,cyan \"npm run dev -w @living-draft/server\" \"npm run dev -w @living-draft/web\"",
+    "build": "npm run build -w @living-draft/web",
+    "build:app": "npm run build:app -w @living-draft/web",
+    "preview:app": "npm run preview:app -w @living-draft/web",
+    "start": "npm run start -w @living-draft/server",
+    "seed": "npm run seed -w @living-draft/server --",
+    "art": "npm run art -w @living-draft/server",
+    "eval": "npm run eval -w @living-draft/engine",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "serve": "npm run build && npm start"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "concurrently": "^10.0.7",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}
