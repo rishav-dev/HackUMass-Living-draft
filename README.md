@@ -6,6 +6,8 @@ The Living Draft is a private, voice-first journal for your whole life, laid out
 
 Built for HackUMass XIV.
 
+**Try it: https://rishav-dev.github.io/HackUMass-Living-draft/** Press **Explore the demo notebook** to open Kinjal's made-up notebook, or **Start your notebook** to make your own. Everything runs in your browser and stays there. The writing helper needs a hosted model key in Settings; without one, the quick first pass does the reading.
+
 ## Running it
 
 You need Node.js 22.13 or newer. Nothing else: no database server, no API keys, no paid services.
