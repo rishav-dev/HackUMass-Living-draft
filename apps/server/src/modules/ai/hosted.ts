@@ -154,32 +154,54 @@ async function chat(
   return data.choices?.[0]?.message?.content ?? '';
 }
 
+const roomFor = (link: Connection, options: AskOptions): AskOptions => ({
+  ...options,
+  maxTokens: /gpt-oss|o\d|reason|r1|qwen3/i.test(link.model)
+    ? Math.max(options.maxTokens * 4, 4096)
+    : Math.max(options.maxTokens * 2, 2048),
+});
+
+const thinkLightly = (link: Connection): Record<string, unknown> =>
+  /gpt-oss/i.test(link.model) ? { reasoning_effort: 'low' } : {};
+
+const retryable = (error: unknown) =>
+  !(error instanceof HttpError) || (error as { detail?: string }).detail !== undefined;
+
 async function hostedJson<T>(
   link: Connection,
   options: AskOptions,
   schema: JsonSchema,
 ): Promise<T> {
-  try {
-    const reply = await chat(link, options, {
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: 'reply', schema, strict: false },
+  const roomy = roomFor(link, options);
+  const spelled = {
+    ...roomy,
+    system: `${options.system}\n\nReply with one JSON object that fits this JSON schema, and nothing else:\n${JSON.stringify(schema)}`,
+  };
+  const tries: Array<[AskOptions, Record<string, unknown>]> = [
+    [
+      roomy,
+      {
+        ...thinkLightly(link),
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'reply', schema, strict: false },
+        },
       },
-    });
-    return readJson<T>(reply);
-  } catch (error) {
-    const detail = (error as { detail?: string }).detail ?? '';
-    if (!/response_format|json_schema|not supported/i.test(detail)) throw error;
+    ],
+    [spelled, { ...thinkLightly(link), response_format: { type: 'json_object' } }],
+    [spelled, thinkLightly(link)],
+    [spelled, {}],
+  ];
+  let failure: unknown;
+  for (const [ask, extra] of tries) {
+    try {
+      return readJson<T>(await chat(link, ask, extra));
+    } catch (error) {
+      if (!retryable(error)) throw error;
+      failure = error;
+    }
   }
-  const reply = await chat(
-    link,
-    {
-      ...options,
-      system: `${options.system}\n\nReply with one JSON object that fits this JSON schema, and nothing else:\n${JSON.stringify(schema)}`,
-    },
-    { response_format: { type: 'json_object' } },
-  );
-  return readJson<T>(reply);
+  throw failure;
 }
 
 export async function testConnection(): Promise<string> {
