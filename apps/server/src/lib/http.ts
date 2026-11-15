@@ -19,9 +19,27 @@ export const badRequest = (message: string, details?: unknown) =>
 export function parse<S extends z.ZodType>(schema: S, value: unknown): z.infer<S> {
   const result = schema.safeParse(value);
   if (!result.success) {
+    const issues = result.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
+    const first = result.error.issues[0];
+    const where = (first?.path ?? [])
+      .filter((part) => typeof part === 'string')
+      .map((part) =>
+        String(part)
+          .replace(/([A-Z])/g, ' $1')
+          .toLowerCase(),
+      )
+      .join(' › ');
+    const problem =
+      first?.code === 'too_small'
+        ? 'is empty or too short'
+        : first?.code === 'too_big'
+          ? 'is too long'
+          : first?.code === 'invalid_type'
+            ? 'is missing or the wrong kind of value'
+            : "isn't one of the options this accepts";
     throw badRequest(
-      'Invalid request',
-      result.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      where ? `The ${where} ${problem}.` : 'Something in that request was off.',
+      issues,
     );
   }
   return result.data;

@@ -64,15 +64,25 @@ export function bootDevice(): Promise<Runtime> {
   booting ??= (async () => {
     const [SQL] = await Promise.all([initSqlJs({ locateFile: () => wasmUrl }), loadFiles()]);
     useSqlEngine(SQL);
-    const [{ config }, { openDatabase }, { apiRouter }, { deleteStalePending }, { HttpError }] =
-      await Promise.all([
-        import('../../../server/src/config'),
-        import('../../../server/src/db/database'),
-        import('../../../server/src/modules/routes'),
-        import('../../../server/src/modules/media/media.repository'),
-        import('../../../server/src/lib/http'),
-      ]);
+    const [
+      { config },
+      { openDatabase },
+      { apiRouter },
+      { deleteStalePending },
+      { HttpError },
+      { withHosted },
+      { noRunner, useAiRunner },
+    ] = await Promise.all([
+      import('../../../server/src/config'),
+      import('../../../server/src/db/database'),
+      import('../../../server/src/modules/routes'),
+      import('../../../server/src/modules/media/media.repository'),
+      import('../../../server/src/lib/http'),
+      import('../../../server/src/modules/ai/hosted'),
+      import('../../../server/src/modules/ai/runner'),
+    ]);
     openDatabase(config.databaseFile);
+    useAiRunner(withHosted(noRunner));
     deleteStalePending();
     window.addEventListener('pagehide', () => {
       saveAllDatabases();
@@ -170,4 +180,13 @@ export async function deviceRequest(
     headers: res.headers,
     body: resolveMedia(res.body, runtime.mediaDir),
   };
+}
+
+export async function importArchiveBytes(bytes: Uint8Array): Promise<number> {
+  await bootDevice();
+  const { importArchive } = await import('../../../server/src/modules/archive/archive.service');
+  const result = importArchive(bytes);
+  saveAllDatabases();
+  await settle();
+  return result.memories;
 }

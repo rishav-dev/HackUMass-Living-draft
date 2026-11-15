@@ -1,0 +1,21 @@
+{
+  "name": "The Living Draft",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "hostRequirements": { "cpus": 4, "memory": "16gb", "storage": "32gb" },
+  "postCreateCommand": "npm ci && npm run seed -- --no-art && npm run build",
+  "postAttachCommand": "npm start",
+  "forwardPorts": [4317],
+  "portsAttributes": {
+    "4317": { "label": "The Living Draft", "onAutoForward": "openBrowser" }
+  },
+  "secrets": {
+    "LIVING_DRAFT_AI_URL": {
+      "description": "Optional. An OpenAI-compatible endpoint for a faster hosted model, e.g. https://api.groq.com/openai/v1. Leave empty to run the model inside the Codespace."
+    },
+    "LIVING_DRAFT_AI_KEY": { "description": "Optional. The API key for that endpoint." },
+    "LIVING_DRAFT_AI_MODEL": { "description": "Optional. The model name at that endpoint." },
+    "LIVING_DRAFT_SMTP": {
+      "description": "Optional. smtp://user:password@host:587 so sign-up codes and reset links are emailed."
+    }
+  }
+}

@@ -1,11 +1,23 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { motion } from 'motion/react';
-import { Bookmark, GitCompare, Link2, Pin, Search, X } from 'lucide-react';
-import type { ComparisonDto } from '@living-draft/contracts';
+import {
+  Bookmark,
+  BookmarkCheck,
+  GitCompare,
+  Link2,
+  LoaderCircle,
+  Pin,
+  Search,
+  X,
+} from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import type { CompareInsightDto, ComparisonDto, SavedAnalysisDto } from '@living-draft/contracts';
 import { api } from '../../api/client';
 import {
+  useAnalyses,
   useCompare,
+  useCompareInsight,
   useCompareQuestions,
   useInvalidateArchive,
   useMemories,
@@ -27,6 +39,7 @@ export default function ComparePage() {
   const { data: memories } = useMemories({ q: query || undefined });
   const { data: questions } = useCompareQuestions();
   const compare = useCompare();
+  const insight = useCompareInsight();
   const { play } = useSound();
   useScene('studio');
 
@@ -46,6 +59,7 @@ export default function ComparePage() {
   const run = (q = question) => {
     play('shift');
     compare.mutate({ memoryIds: selected, question: q || undefined });
+    insight.mutate({ memoryIds: selected, question: q || undefined });
   };
 
   return (
@@ -165,7 +179,15 @@ export default function ComparePage() {
             </form>
           </div>
 
-          {compare.data && <Results data={compare.data} question={question} />}
+          {compare.data && (
+            <Results
+              data={compare.data}
+              question={question}
+              insight={insight.data ?? null}
+              thinking={insight.isPending}
+              failed={insight.isError}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -179,8 +201,68 @@ function highlight(quote: string, term: string) {
   return [{ start: at, end: end < 0 ? quote.length : at + end }];
 }
 
-function Results({ data, question }: { data: ComparisonDto; question: string }) {
+const KIND_LABEL: Record<CompareInsightDto['observations'][number]['kind'], string> = {
+  alike: 'Alike',
+  different: 'Different',
+  changed: 'What changed',
+  reading: 'One way to read it',
+};
+
+const sameScope = (a: string[], b: string[]) =>
+  a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|');
+
+function Results({
+  data,
+  question,
+  insight,
+  thinking,
+  failed,
+}: {
+  data: ComparisonDto;
+  question: string;
+  insight: CompareInsightDto | null;
+  thinking: boolean;
+  failed: boolean;
+}) {
   const [connecting, setConnecting] = useState(false);
+  const client = useQueryClient();
+  const { data: analyses } = useAnalyses();
+  const ids = data.memories.map((m) => m.id);
+  const saved = analyses?.find(
+    (a: SavedAnalysisDto) =>
+      a.kind === 'compare' &&
+      a.question === (question || 'Comparison') &&
+      sameScope((a.result as { memoryIds?: string[] } | null)?.memoryIds ?? [], ids),
+  );
+  const [busy, setBusy] = useState(false);
+  const toggleSaved = async () => {
+    setBusy(true);
+    try {
+      if (saved) {
+        await api.delete(`/analyses/${saved.id}`);
+        toast('Removed from Saved.');
+      } else {
+        await api.post('/analyses', {
+          kind: 'compare',
+          question: question || 'Comparison',
+          scope: { memoryIds: ids },
+          result: {
+            memoryIds: ids,
+            titles: data.memories.map((m) => m.title),
+            headline: insight?.headline ?? data.summary.join(' '),
+            observations: insight?.observations ?? [],
+            caveat: insight?.caveat ?? '',
+            summary: data.summary,
+          },
+        });
+        toast('Saved. You can find it under Saved.');
+      }
+      await client.invalidateQueries({ queryKey: ['analyses'] });
+      await client.invalidateQueries({ queryKey: ['saved'] });
+    } finally {
+      setBusy(false);
+    }
+  };
   const invalidate = useInvalidateArchive();
   const toast = useToast();
   const { play } = useSound();
@@ -196,27 +278,54 @@ function Results({ data, question }: { data: ComparisonDto; question: string }) 
     >
       <section className="paper rounded-3xl p-6">
         <p className="eyebrow">{question || 'what stands out'}</p>
-        <ul className="mt-2 space-y-2 text-[1.05rem]">
-          {data.summary.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
+        {insight ? (
+          <div className="mt-2">
+            <p className="font-display text-xl leading-snug">{insight.headline}</p>
+            <ul className="mt-4 space-y-3">
+              {insight.observations.map((o) => (
+                <li key={o.text} className="rounded-2xl bg-cream/60 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+                    {KIND_LABEL[o.kind] ?? o.kind}
+                    {o.basis === 'suggested' && o.kind !== 'reading'
+                      ? ' · a reading, not a fact'
+                      : ''}
+                  </p>
+                  <p className="mt-1 text-[1.02rem]">{o.text}</p>
+                </li>
+              ))}
+            </ul>
+            {insight.caveat && <p className="mt-3 text-sm text-ink-soft">{insight.caveat}</p>}
+          </div>
+        ) : (
+          <>
+            {thinking && (
+              <p role="status" className="mt-2 flex items-center gap-2 text-sm text-ink-soft">
+                <LoaderCircle className="size-4 animate-spin" /> Reading both stories closely. This
+                takes a minute on this computer; the quick comparison below is ready now.
+              </p>
+            )}
+            {failed && (
+              <p className="mt-2 text-sm text-ink-soft">
+                The closer reading didn&apos;t finish this time. The quick comparison is below.
+              </p>
+            )}
+            <ul className="mt-2 space-y-2 text-[1.05rem]">
+              {data.summary.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             size="sm"
-            variant="ghost"
-            icon={<Bookmark className="size-4" />}
-            onClick={async () => {
-              await api.post('/analyses', {
-                kind: 'compare',
-                question: question || 'Comparison',
-                scope: { memoryIds: data.memories.map((m) => m.id) },
-                result: data,
-              });
-              toast('Saved to your notes.');
-            }}
+            variant={saved ? 'soft' : 'ghost'}
+            aria-pressed={Boolean(saved)}
+            disabled={busy || (thinking && !saved)}
+            icon={saved ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}
+            onClick={toggleSaved}
           >
-            Save this
+            {saved ? 'Saved' : 'Save this'}
           </Button>
           <Button
             size="sm"

@@ -1,11 +1,97 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Download, Glasses, Watch } from 'lucide-react';
+import { api, ON_DEVICE } from '../../api/client';
 import { Button } from '../../components/ui/Button';
 
 interface InstallPrompt extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+interface PhoneBridge {
+  sendToWatch: (address: string, code: string) => void;
+}
+
+const phoneBridge = () =>
+  (window as unknown as { LivingDraftAndroid?: PhoneBridge }).LivingDraftAndroid ?? null;
+
+function ConnectWatch() {
+  const [pairing, setPairing] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!pairing) return;
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(tick);
+  }, [pairing]);
+
+  const start = () => {
+    setError(null);
+    api
+      .post<{ code: string; expiresAt: string }>('/devices/pair')
+      .then((next) => {
+        setNow(Date.now());
+        setPairing(next);
+        phoneBridge()?.sendToWatch(window.location.origin, next.code);
+      })
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : 'Couldn’t make a code. Try again.'),
+      );
+  };
+
+  const left = pairing ? Math.max(0, new Date(pairing.expiresAt).getTime() - now) : 0;
+  const minutes = Math.floor(left / 60_000);
+  const seconds = Math.floor((left % 60_000) / 1000);
+
+  return (
+    <div className="flex gap-3">
+      <Watch className="mt-0.5 size-5 shrink-0 text-ink-soft" aria-hidden="true" />
+      <div className="flex-1">
+        <p className="font-semibold">Connect a watch</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          The Living Draft watch app shows a memory for today, reads it to you, saves new ones you
+          say out loud and answers questions. Open it on the watch, then enter this address and the
+          code below.
+        </p>
+        {pairing && left > 0 ? (
+          <div className="mt-3 rounded-2xl bg-white/5 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Address</p>
+            <p className="break-all font-mono text-sm">{window.location.origin}</p>
+            <p className="mt-3 text-xs font-bold uppercase tracking-wide text-ink-soft">Code</p>
+            <p className="font-mono text-4xl font-semibold tracking-[0.25em]" aria-live="polite">
+              {pairing.code.slice(0, 3)} {pairing.code.slice(3)}
+            </p>
+            <p className="mt-1 text-xs text-ink-soft">
+              Works once, for {minutes}:{seconds.toString().padStart(2, '0')} more.
+            </p>
+            {phoneBridge() && (
+              <p className="mt-2 text-sm">
+                Sent to your watch over Bluetooth.{' '}
+                <button
+                  type="button"
+                  className="font-semibold text-lavender-deep underline"
+                  onClick={() => phoneBridge()?.sendToWatch(window.location.origin, pairing.code)}
+                >
+                  Send it again
+                </button>
+              </p>
+            )}
+          </div>
+        ) : (
+          <Button size="sm" variant="soft" className="mt-3" onClick={start}>
+            {pairing ? 'Make a new code' : 'Show a pairing code'}
+          </Button>
+        )}
+        {error && (
+          <p role="alert" className="mt-2 text-sm font-semibold text-rose-deep">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function DevicesSection() {
@@ -63,6 +149,7 @@ export function DevicesSection() {
             </>
           )}
         </div>
+        {!ON_DEVICE && <ConnectWatch />}
         <div className="flex gap-3">
           <Watch className="mt-0.5 size-5 shrink-0 text-ink-soft" aria-hidden="true" />
           <p>

@@ -11,3 +11,4 @@ Thumbs.db
 
 # Local archive: the database and every uploaded photo, video and recording
 apps/server/data/
+apps/web/public/demo/

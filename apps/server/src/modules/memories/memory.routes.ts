@@ -1,3 +1,6 @@
+import { ai } from '../ai/runner';
+import { startTask } from '../ai/jobs';
+import { discoverThreads } from '../ai/threads';
 import { Router } from 'express';
 import {
   addVersionSchema,
@@ -41,6 +44,7 @@ memoryRouter.get('/', (req, res) => {
 memoryRouter.post('/', (req, res) => {
   const created = createMemory(body(req, createMemorySchema));
   res.status(201).json(memoryDetail(created.memoryId));
+  if (ai.available()) startTask(() => discoverThreads([created.memoryId]));
 });
 
 memoryRouter.get('/:id', (req, res) => {
@@ -71,6 +75,7 @@ memoryRouter.post('/:id/confirm-placement', (req, res) => {
 
 memoryRouter.post('/:id/versions', (req, res) => {
   const result = addVersion(param(req, 'id'), body(req, addVersionSchema));
+  if (ai.available()) startTask(() => discoverThreads([result.memoryId]));
   res.status(201).json({
     memory: memoryDetail(result.memoryId),
     comparison: result.comparison,

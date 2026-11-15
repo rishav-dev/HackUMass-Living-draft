@@ -1,16 +1,32 @@
 import { useMemo, useState } from 'react';
-import { BookCopy, Check, Eye, EyeOff, Plus, RotateCcw, Sparkles, Undo2 } from 'lucide-react';
+import {
+  BookCopy,
+  Check,
+  Eye,
+  EyeOff,
+  MessageCircleQuestion,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Undo2,
+} from 'lucide-react';
 import type {
+  AiJobDto,
+  AiNotesDto,
+  AiStatusDto,
   CaptureAnalysisDto,
   PersonDecision,
   Role,
   TemporalDto,
+  UnderstandingInput,
 } from '@living-draft/contracts';
+import { AiBanner } from './aiReview';
+import { mergeAiFeelings, mergeAiPeople } from './aiMerge';
 import { useCharacters, useMilestones } from '../../api/hooks';
 import { EmotionChip, Portrait } from '../../components/memory/bits';
 import { Button } from '../../components/ui/Button';
 import { Segmented, Select, TextArea, TextInput, Toggle } from '../../components/ui/controls';
-import { BASE_EMOTION_TAGS, emotionMeta } from '../../lib/meta';
+import { ALL_EMOTION_TAGS, emotionMeta, TIME_SPANS } from '../../lib/meta';
 import { useSound } from '../../lib/sound/SoundProvider';
 import type { Attachment } from './useCaptureDraft';
 import { PlacementEditor } from './PlacementEditor';
@@ -32,9 +48,10 @@ export interface ReviewResult {
   newMilestones: Array<{ title: string; ageMin: number | null; ageMax: number | null }>;
   place: string | null;
   sensitive: boolean;
+  understanding: UnderstandingInput;
 }
 
-interface PersonRow {
+export interface PersonRow {
   key: string;
   include: boolean;
   characterId: string | null;
@@ -75,7 +92,18 @@ export function ReviewMemory({
   saving,
   onSave,
   onBack,
+  ai,
+  job,
+  rewrite,
+  onAskAgain,
 }: {
+  ai: AiStatusDto | null;
+  job: AiJobDto | null;
+  rewrite: AiJobDto | null;
+  onAskAgain: (body: {
+    memoryId?: string;
+    answers?: Array<{ question: string; answer: string }>;
+  }) => void;
   original: string;
   analysis: CaptureAnalysisDto;
   attachments: Attachment[];
@@ -91,6 +119,15 @@ export function ReviewMemory({
 
   const [title, setTitle] = useState(analysis.title);
   const [readingCopy, setReadingCopy] = useState(analysis.readingCopy);
+  const [titleEdited, setTitleEdited] = useState(false);
+  const [readingEdited, setReadingEdited] = useState(false);
+  const [notes, setNotes] = useState<AiNotesDto | null>(null);
+  const [aiNarrative, setAiNarrative] = useState<string | null>(null);
+  const [themes, setThemes] = useState<Array<{ theme: string; because: string; include: boolean }>>(
+    [],
+  );
+  const [questions, setQuestions] = useState<Array<{ question: string; answer: string }>>([]);
+  const [placesFound, setPlacesFound] = useState<Array<{ name: string; kind: string }>>([]);
   const [showChanges, setShowChanges] = useState(true);
   const [temporal, setTemporal] = useState<TemporalDto>(() => {
     if (presetAge !== null && analysis.temporal.ageMin === null && !analysis.temporal.year) {
@@ -135,11 +172,38 @@ export function ReviewMemory({
   const [newMilestones, setNewMilestones] = useState<string[]>([]);
   const likely = analysis.matches.find((m) => m.verdict === 'likely_same');
   const [target, setTarget] = useState<string>(presetMemoryId ?? 'new');
-  const [mode, setMode] = useState<'addition' | 'retelling'>(() =>
-    original.length < 400 ? 'addition' : 'retelling',
-  );
   const [place, setPlace] = useState('');
+  const [span, setSpan] = useState<string | null>(null);
+  const [spanEdited, setSpanEdited] = useState(false);
   const [sensitive, setSensitive] = useState(false);
+  const [aiMilestone, setAiMilestone] = useState<string | null>(null);
+
+  const freshNotes = job?.notes ?? null;
+  if (freshNotes && freshNotes !== notes) {
+    setNotes(freshNotes);
+    if (!titleEdited && freshNotes.title.trim()) setTitle(freshNotes.title.trim());
+    setPeople((rows) => mergeAiPeople(rows, freshNotes, characters ?? []));
+    setEmotions((list) => mergeAiFeelings(list, freshNotes));
+    setThemes(freshNotes.themes.map((t) => ({ ...t, include: true })));
+    setQuestions(freshNotes.questions.map((question) => ({ question, answer: '' })));
+    setPlacesFound(freshNotes.places);
+    const town = freshNotes.places.find((p) => p.kind !== 'home' && p.kind !== 'other');
+    if (!place && town) setPlace(town.name);
+    if (!spanEdited && freshNotes.time.kind !== 'unclear') setSpan(freshNotes.time.kind);
+    if (freshNotes.milestone.isMilestone && freshNotes.milestone.title.trim()) {
+      const label = freshNotes.milestone.title.trim();
+      setAiMilestone(label);
+      setNewMilestones((list) => (list.includes(label) ? list : [...list, label]));
+    }
+  }
+  const latestNarrative =
+    (rewrite?.status === 'done' ? rewrite.narrative : null) ?? job?.narrative ?? null;
+  if (latestNarrative && latestNarrative !== aiNarrative) {
+    setAiNarrative(latestNarrative);
+    if (!readingEdited) setReadingCopy(latestNarrative);
+  }
+  const working = job?.status === 'working' || rewrite?.status === 'working';
+  const stage = rewrite?.status === 'working' ? 'narrative' : (job?.stage ?? null);
 
   const hedges = useMemo(() => analysis.hedges, [analysis.hedges]);
   const attaching = target !== 'new';
@@ -150,7 +214,9 @@ export function ReviewMemory({
   const save = () => {
     const chosen = people.filter((p) => p.include);
     onSave({
-      target: attaching ? { memoryId: target, mode } : 'new',
+      target: attaching
+        ? { memoryId: target, mode: aiNarrative ? 'retelling' : 'addition' }
+        : 'new',
       title: title.trim() || analysis.title,
       readingCopy: readingCopy.trim(),
       temporal: { ...temporal, confirmed: true },
@@ -176,8 +242,27 @@ export function ReviewMemory({
       })),
       place: place.trim() || null,
       sensitive,
+      understanding: {
+        summary: notes?.summary ?? null,
+        time: span ? { kind: span, hint: notes?.time.hint ?? '' } : null,
+        themes: themes
+          .filter((t) => t.include)
+          .map((t) => ({ theme: t.theme, evidence: t.because })),
+        followups: questions.map((q) => ({
+          question: q.question,
+          answer: q.answer.trim() || null,
+        })),
+        places: [
+          ...(place.trim() ? [{ name: place.trim(), kind: null }] : []),
+          ...placesFound
+            .filter((p) => p.name.toLowerCase() !== place.trim().toLowerCase())
+            .map((p) => ({ name: p.name, kind: p.kind })),
+        ],
+      },
     });
   };
+
+  const answered = questions.filter((q) => q.answer.trim());
 
   return (
     <div className="mx-auto grid max-w-6xl gap-5 px-4 pb-32 pt-6 lg:grid-cols-[1.05fr_1fr] lg:gap-7 sm:px-6">
@@ -195,8 +280,8 @@ export function ReviewMemory({
             </button>
           }
         >
-          <p className="ruled rounded-xl bg-paper px-1 font-display text-[1.08rem] text-ink">
-            {showChanges
+          <p className="ruled max-h-[28rem] overflow-y-auto rounded-xl bg-paper px-1 font-display text-[1.08rem] text-ink">
+            {showChanges && !aiNarrative
               ? analysis.diff.map((segment, i) =>
                   segment.type === 'same' ? (
                     <span key={i}>{segment.text}</span>
@@ -222,7 +307,10 @@ export function ReviewMemory({
           </p>
           <p className="mt-3 text-xs text-ink-soft">
             Your exact words are kept forever as the original.{' '}
-            {analysis.removedFillers + analysis.removedRepeats > 0
+            {aiNarrative
+              ? 'The version below was rewritten from them so it reads well later, without adding anything you did not say.'
+              : null}
+            {!aiNarrative && analysis.removedFillers + analysis.removedRepeats > 0
               ? `The reading copy drops ${analysis.removedFillers} filler ${analysis.removedFillers === 1 ? 'word' : 'words'} and ${analysis.removedRepeats} repeat${analysis.removedRepeats === 1 ? '' : 's'}, nothing else.`
               : 'Nothing needed tidying.'}
             {hedges.length > 0 &&
@@ -233,10 +321,13 @@ export function ReviewMemory({
         <Card
           title="Reading copy"
           aside={
-            readingCopy !== analysis.readingCopy ? (
+            readingEdited ? (
               <button
                 type="button"
-                onClick={() => setReadingCopy(analysis.readingCopy)}
+                onClick={() => {
+                  setReadingCopy(aiNarrative ?? analysis.readingCopy);
+                  setReadingEdited(false);
+                }}
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
               >
                 <Undo2 className="size-4" /> Undo my edits
@@ -244,7 +335,10 @@ export function ReviewMemory({
             ) : (
               <button
                 type="button"
-                onClick={() => setReadingCopy(original.trim())}
+                onClick={() => {
+                  setReadingCopy(original.trim());
+                  setReadingEdited(true);
+                }}
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink"
               >
                 <RotateCcw className="size-4" /> Use my exact words
@@ -258,7 +352,10 @@ export function ReviewMemory({
           <TextInput
             id="title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              setTitleEdited(true);
+            }}
             className="font-display text-lg font-semibold"
           />
           <label htmlFor="reading" className="mb-1.5 mt-4 block text-sm font-bold">
@@ -268,7 +365,10 @@ export function ReviewMemory({
             id="reading"
             rows={Math.min(14, Math.max(5, Math.ceil(readingCopy.length / 70)))}
             value={readingCopy}
-            onChange={(e) => setReadingCopy(e.target.value)}
+            onChange={(e) => {
+              setReadingCopy(e.target.value);
+              setReadingEdited(true);
+            }}
             className="font-display text-[1.05rem]"
           />
         </Card>
@@ -294,6 +394,61 @@ export function ReviewMemory({
       </div>
 
       <div className="flex flex-col gap-5">
+        <AiBanner ai={ai} job={job} working={working} stage={stage} />
+
+        {questions.length > 0 && (
+          <Card
+            title="A few questions, if you like"
+            aside={<MessageCircleQuestion className="size-5 text-lavender-deep" />}
+          >
+            <p className="mb-3 text-sm text-ink-soft">
+              Answer any, all or none. Skipped ones stay with the memory so you can come back to
+              them.
+            </p>
+            <ul className="flex flex-col gap-3">
+              {questions.map((q, i) => (
+                <li key={q.question}>
+                  <label htmlFor={`followup-${i}`} className="block text-sm font-semibold">
+                    {q.question}
+                  </label>
+                  <TextArea
+                    id={`followup-${i}`}
+                    rows={2}
+                    value={q.answer}
+                    onChange={(e) =>
+                      setQuestions((list) =>
+                        list.map((x, j) => (j === i ? { ...x, answer: e.target.value } : x)),
+                      )
+                    }
+                    className="mt-1 text-sm"
+                    placeholder="Skip it if you'd rather"
+                  />
+                </li>
+              ))}
+            </ul>
+            {answered.length > 0 && (
+              <Button
+                size="sm"
+                variant="soft"
+                className="mt-3"
+                disabled={working}
+                icon={<Sparkles className="size-4" />}
+                onClick={() =>
+                  onAskAgain({
+                    memoryId: attaching ? target : undefined,
+                    answers: answered.map((q) => ({
+                      question: q.question,
+                      answer: q.answer.trim(),
+                    })),
+                  })
+                }
+              >
+                Rewrite it with my answers
+              </Button>
+            )}
+          </Card>
+        )}
+
         {analysis.matches.length > 0 && !presetMemoryId && (
           <Card title={likely ? 'This sounds familiar' : 'Might be related'}>
             <div
@@ -314,6 +469,7 @@ export function ReviewMemory({
                     onChange={() => {
                       play('tap');
                       setTarget(match.memoryId);
+                      if (aiNarrative !== null || working) onAskAgain({ memoryId: match.memoryId });
                     }}
                   />
                   <span className="min-w-0">
@@ -349,24 +505,6 @@ export function ReviewMemory({
                 </span>
               </label>
             </div>
-          </Card>
-        )}
-
-        {attaching && (
-          <Card title="How does this fit?">
-            <Segmented
-              label="Kind of telling"
-              value={mode}
-              onChange={setMode}
-              options={[
-                { value: 'addition', label: 'It adds details' },
-                { value: 'retelling', label: 'It retells the whole thing' },
-              ]}
-            />
-            <p className="mt-3 text-sm text-ink-soft">
-              Either way, the earlier telling stays exactly as it was. If something seems to differ,
-              I'll show you both and ask how to keep them.
-            </p>
           </Card>
         )}
 
@@ -448,8 +586,11 @@ export function ReviewMemory({
                   />
                 )}
                 <p className="mt-2 text-xs text-ink-soft">
-                  You said “{person.surfaces.join('”, “')}”
-                  {person.evidence ? (
+                  {person.relationship ? (
+                    <span className="font-semibold text-ink">{person.relationship} · </span>
+                  ) : null}
+                  You said “{person.surfaces.slice(0, 3).join('”, “')}”
+                  {person.evidence && person.evidence.length <= 160 ? (
                     <>
                       {' '}
                       · <span className="italic">{person.evidence}</span>
@@ -500,7 +641,7 @@ export function ReviewMemory({
               className="h-9 w-52 py-1 text-sm"
             />
             <datalist id="review-feelings">
-              {BASE_EMOTION_TAGS.map((t) => (
+              {ALL_EMOTION_TAGS.map((t) => (
                 <option key={t} value={t}>
                   {emotionMeta(t).label}
                 </option>
@@ -546,25 +687,26 @@ export function ReviewMemory({
 
         {!attaching && (
           <Card title="Milestones and details">
-            {analysis.milestones
-              .filter((m) => !m.existing)
-              .map((cue) => (
-                <label key={cue.label} className="mb-2 flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4"
-                    checked={newMilestones.includes(cue.label)}
-                    onChange={(e) =>
-                      setNewMilestones((list) =>
-                        e.target.checked
-                          ? [...list, cue.label]
-                          : list.filter((l) => l !== cue.label),
-                      )
-                    }
-                  />
-                  Make “{cue.label}” a milestone
-                </label>
-              ))}
+            {[
+              ...(aiMilestone && !analysis.milestones.some((m) => m.label === aiMilestone)
+                ? [{ label: aiMilestone }]
+                : []),
+              ...analysis.milestones.filter((m) => !m.existing),
+            ].map((cue) => (
+              <label key={cue.label} className="mb-2 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4"
+                  checked={newMilestones.includes(cue.label)}
+                  onChange={(e) =>
+                    setNewMilestones((list) =>
+                      e.target.checked ? [...list, cue.label] : list.filter((l) => l !== cue.label),
+                    )
+                  }
+                />
+                Make “{cue.label}” a milestone
+              </label>
+            ))}
             {milestones && milestones.length > 0 && (
               <div className="mb-4 flex flex-wrap gap-1.5">
                 {milestones.map((m) => {
@@ -587,6 +729,48 @@ export function ReviewMemory({
                 })}
               </div>
             )}
+            {themes.length > 0 && (
+              <div className="mb-4">
+                <p className="mb-1.5 text-sm font-bold">Threads it belongs to</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {themes.map((t, i) => (
+                    <button
+                      key={t.theme}
+                      type="button"
+                      aria-pressed={t.include}
+                      title={t.because}
+                      onClick={() =>
+                        setThemes((list) =>
+                          list.map((x, j) => (j === i ? { ...x, include: !x.include } : x)),
+                        )
+                      }
+                      className={`rounded-full px-3 py-1 text-xs font-bold transition ${t.include ? 'bg-lavender-deep text-abyss' : 'bg-linen text-ink-soft line-through'}`}
+                    >
+                      {t.theme}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p id="span-label" className="mb-1.5 text-sm font-bold">
+              How long did it last? (optional)
+            </p>
+            <div role="group" aria-labelledby="span-label" className="mb-4 flex flex-wrap gap-2">
+              {TIME_SPANS.map((s) => (
+                <button
+                  key={s.kind}
+                  type="button"
+                  aria-pressed={span === s.kind}
+                  onClick={() => {
+                    setSpanEdited(true);
+                    setSpan(span === s.kind ? null : s.kind);
+                  }}
+                  className={`rounded-full px-3 py-1 text-xs font-bold transition ${span === s.kind ? 'bg-gold-deep text-abyss' : 'bg-linen text-ink-soft hover:text-ink'}`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
             <label htmlFor="place" className="mb-1.5 block text-sm font-bold">
               Place (optional)
             </label>
@@ -608,7 +792,7 @@ export function ReviewMemory({
         )}
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/8 bg-ivory/90 px-4 py-3">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/8 bg-[#141119]/95 px-4 py-3">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <Button variant="ghost" onClick={onBack} sound="shift">
             Back to my notes

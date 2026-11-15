@@ -2,6 +2,30 @@ import type { TextSpan } from '../types';
 
 const SENTENCE_END = /[.!?]+["')\]]*(?=\s|$)|\n+/g;
 
+const LONGEST = 240;
+const SOFT_BREAK =
+  /,\s+|\s+(?=(?:and then|and so|so then|after that|and|so|but|because|then|when|until|which)\s)/gi;
+
+function breakRunOn(text: string, span: TextSpan): TextSpan[] {
+  if (span.end - span.start <= LONGEST) return [span];
+  const body = text.slice(span.start, span.end);
+  const cuts = [...body.matchAll(SOFT_BREAK)].map((m) => (m.index ?? 0) + m[0].length);
+  const pieces: TextSpan[] = [];
+  let from = 0;
+  while (body.length - from > LONGEST) {
+    const window = cuts.filter((c) => c - from >= 60 && c - from <= LONGEST);
+    let cut = window.length ? window[window.length - 1]! : -1;
+    if (cut < 0) {
+      const space = body.lastIndexOf(' ', from + 200);
+      cut = space > from + 40 ? space + 1 : from + 200;
+    }
+    pushTrimmed(pieces, text, span.start + from, span.start + cut);
+    from = cut;
+  }
+  pushTrimmed(pieces, text, span.start + from, span.end);
+  return pieces;
+}
+
 export function splitSentences(text: string): TextSpan[] {
   const spans: TextSpan[] = [];
   let cursor = 0;
@@ -11,7 +35,7 @@ export function splitSentences(text: string): TextSpan[] {
     cursor = end;
   }
   pushTrimmed(spans, text, cursor, text.length);
-  return spans;
+  return spans.flatMap((span) => breakRunOn(text, span));
 }
 
 const CLAUSE_BREAK =

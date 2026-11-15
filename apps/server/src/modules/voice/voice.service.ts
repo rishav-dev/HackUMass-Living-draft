@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { KokoroTTS } from 'kokoro-js';
 import type { VoiceStatusDto } from '@living-draft/contracts';
 import { config } from '../../config';
+import { stepAside, WORK_THREADS } from '../../lib/background';
 import { HttpError } from '../../lib/http';
 
 const MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX';
@@ -32,17 +32,7 @@ const waiting = new Map<string, Job>();
 let busy = false;
 let written = 0;
 
-const THREADS = Math.max(1, Math.min(4, Math.floor(os.availableParallelism() / 2) - 1));
-
 const modelFile = () => path.join(config.modelDir, MODEL, 'onnx', 'model.onnx');
-
-function stepAside() {
-  try {
-    os.setPriority(os.constants.priority.PRIORITY_BELOW_NORMAL);
-  } catch {
-    return;
-  }
-}
 
 export function voiceStatus(): VoiceStatusDto {
   return { status, progress, downloaded: fs.existsSync(modelFile()), reason };
@@ -80,7 +70,7 @@ function load(): Promise<KokoroTTS> {
       transformers.StyleTextToSpeech2Model.from_pretrained(MODEL, {
         dtype: 'fp32',
         device: 'cpu',
-        session_options: { intraOpNumThreads: THREADS, interOpNumThreads: 1 },
+        session_options: { intraOpNumThreads: WORK_THREADS, interOpNumThreads: 1 },
         progress_callback,
       }),
       transformers.AutoTokenizer.from_pretrained(MODEL, { progress_callback }),

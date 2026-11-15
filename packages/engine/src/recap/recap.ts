@@ -121,10 +121,7 @@ export function collectionRecap(input: CollectionRecapInput): string[] {
       const to = ages[i]!;
       if (to - from >= 3) gaps.push(`${from + 1}–${to - 1}`);
     }
-    if (gaps.length)
-      lines.push(
-        `Nothing is recorded for ages ${joinList(gaps.slice(0, 3))}. That's a gap in the telling, not in the life.`,
-      );
+    if (gaps.length) lines.push(`Nothing is recorded yet for ages ${joinList(gaps.slice(0, 3))}.`);
   }
 
   const focus = new Set((input.focusPeople ?? []).map((name) => name.toLowerCase()));

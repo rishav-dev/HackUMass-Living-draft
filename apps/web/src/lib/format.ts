@@ -70,3 +70,14 @@ export function ageRangeLabel(ageMin: number | null, ageMax: number | null): str
   if (ageMax === null || ageMax === ageMin) return `Age ${ageMin}`;
   return `Ages ${ageMin}–${ageMax}`;
 }
+
+export function formatMilestoneDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const when = new Date(Date.UTC(year!, (month ?? 1) - 1, day ?? 1));
+  return when.toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    ...(day ? { day: 'numeric' } : {}),
+  });
+}

@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { readLocal, writeLocal } from '../../lib/storage';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -28,6 +29,7 @@ import { momentPrompts } from '@living-draft/engine';
 import { useWorld } from '../../lib/world/world';
 import { ReviewCapsule, ReviewReflection } from './OtherReviews';
 import { ReviewMemory, type ReviewResult } from './ReviewMemory';
+import { aiUsable, understand, useAiJob, useAiStatus } from '../../api/ai';
 import { SavedScreen } from './SavedScreen';
 import { useAttachments, type CaptureKind } from './useCaptureDraft';
 import { VideoNoteDialog } from './VideoNoteDialog';
@@ -65,9 +67,28 @@ export default function CapturePage() {
       : listed
     : undefined;
 
+  const { data: aiStatus } = useAiStatus();
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [rewriteId, setRewriteId] = useState<string | null>(null);
+  const { data: job } = useAiJob(jobId);
+  const { data: rewrite } = useAiJob(rewriteId);
+  const askAgain = (body: {
+    memoryId?: string;
+    answers?: Array<{ question: string; answer: string }>;
+  }) =>
+    understand({ text: text.trim(), notes: false, ...body })
+      .then((next) => setRewriteId(next.id))
+      .catch(() => undefined);
+
   const [kind, setKind] = useState<CaptureKind>((params.get('type') as CaptureKind) || 'memory');
   const [step, setStep] = useState<Step>('record');
-  const [text, setText] = useState('');
+  const draftKey = `capture-draft:${presetMemoryId ?? 'new'}`;
+  const [text, setText] = useState(() => readLocal(draftKey) ?? '');
+
+  useEffect(() => {
+    const later = window.setTimeout(() => writeLocal(draftKey, text.trim() ? text : null), 400);
+    return () => window.clearTimeout(later);
+  }, [text, draftKey]);
   const [sourceKind, setSourceKind] = useState<'speech' | 'typing'>('typing');
   const [analysis, setAnalysis] = useState<CaptureAnalysisDto | null>(null);
   const [recording, setRecording] = useState<Recording | null>(null);
@@ -148,6 +169,12 @@ export default function CapturePage() {
         setTimeout(resolve, Math.max(0, 1500 - (Date.now() - started))),
       );
       setAnalysis(result);
+      setJobId(null);
+      setRewriteId(null);
+      if (kind === 'memory' && aiUsable(aiStatus))
+        understand({ text: content, memoryId: presetMemoryId ?? undefined })
+          .then((job) => setJobId(job.id))
+          .catch(() => undefined);
       setStep('review');
       play('deny');
     } catch (err) {
@@ -179,6 +206,7 @@ export default function CapturePage() {
         mediaIds: attachments.mediaIds,
         audioId: audio,
         context: world.context(),
+        understanding: result.understanding,
       };
       if (result.target === 'new') {
         const memory = await api.post<MemoryDetailDto>('/memories', {
@@ -202,6 +230,7 @@ export default function CapturePage() {
         setSaved({ memory: response.memory, updated: true, label: 'Memory updated' });
       }
       invalidate();
+      writeLocal(draftKey, null);
       setStep('saved');
       play('saved');
       haptic('saved');
@@ -223,6 +252,7 @@ export default function CapturePage() {
       await api.post(payload.path, { ...payload.body, originalText: text.trim(), audioId: audio });
       invalidate();
       setSaved({ label: payload.label });
+      writeLocal(draftKey, null);
       setStep('saved');
       play(kind === 'capsule' ? 'seal' : 'saved');
       haptic('saved');
@@ -242,7 +272,7 @@ export default function CapturePage() {
   };
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-[radial-gradient(ellipse_at_top,#f6eee0_0%,#efe4d2_45%,#e7dac4_100%)]">
+    <div className="relative min-h-dvh overflow-hidden bg-[radial-gradient(ellipse_at_top,#221d2b_0%,#17151c_50%,#0c0a10_100%)]">
       <Ambience kind="dust" density={0.6} />
       <header className="relative z-20 flex items-center justify-between px-4 py-3 sm:px-6">
         <button
@@ -568,6 +598,10 @@ export default function CapturePage() {
               saving={saving}
               onSave={saveMemory}
               onBack={() => setStep('record')}
+              ai={aiStatus ?? null}
+              job={job ?? null}
+              rewrite={rewrite ?? null}
+              onAskAgain={askAgain}
             />
           </motion.div>
         )}

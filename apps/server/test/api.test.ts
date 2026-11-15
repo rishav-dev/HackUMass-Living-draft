@@ -371,6 +371,93 @@ describe('Living Draft API', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('saves a long, messy recollection exactly as the capture screen sends it', async () => {
+    const spoken = `So this was the spring concert in tenth grade, we had the big Mozart piece, the Requiem I think, and um Mr. Halvorsen our piano coach gave me the hardest part, the accompaniment for the Lacrimosa, which honestly I was not ready for and I told him that like three times. He kept saying I'd grow into it. His wife came to every rehearsal and she would sit in the back and sometimes she'd say something to him and then he'd change the tempo again, which made it worse because I had practiced it one way for weeks. The week before the concert he moved the tempo up again and I basically panicked. I practiced every night until my hands hurt. On the night of the concert I lost my place on the second page and the choir had to stop and start again and everyone was looking at me. After, he said it wasn't my fault but then he told my mom I needed to be more prepared, and I was so angry because I had told him from the start it was too hard and he didn't listen. I still think if he had given me the second part or kept the tempo the same it would have been fine. My mom took me for ice cream after and I didn't even want it. I kind of stopped playing for a while after that, like a few months, and I didn't go back to his lessons.`;
+    const text = spoken.replace(/[.,]/g, '').replace(/\s+/g, ' ');
+    const analysis = await capture(text);
+    const { status, body } = await call<MemoryDetailDto & { error?: string; details?: unknown }>(
+      'POST',
+      '/memories',
+      {
+        title: analysis.title,
+        originalText: text,
+        readingCopy: analysis.readingCopy,
+        sourceKind: 'typing',
+        temporal: { ...analysis.temporal, confirmed: true },
+        people: decisions(analysis),
+        emotions: analysis.emotions.map((e) => ({
+          tag: e.tag,
+          phase: e.phase,
+          source: 'suggested',
+          evidence: e.quote,
+        })),
+        context: {
+          part: 'evening',
+          weekday: 'Saturday',
+          weatherKind: 'clear',
+          weatherLabel: 'clear',
+          temperature: 0.6,
+          place: 'Amherst, Massachusetts',
+        },
+      },
+    );
+    expect(body.details ?? null).toBeNull();
+    expect(status).toBe(201);
+  });
+
+  it('lets milestones be made up, moved, dated and deleted', async () => {
+    type Milestone = {
+      id: string;
+      title: string;
+      ageMin: number | null;
+      ageMax: number | null;
+      date: string | null;
+    };
+    const made = await call<Milestone>('POST', '/milestones', {
+      title: 'Learned to swim',
+      ageMin: 8,
+      ageMax: null,
+      description: 'At the Y pool',
+      memoryIds: [promiseId],
+    });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ ageMin: 8, ageMax: 8, date: null });
+
+    const moved = await call<Milestone>('PUT', `/milestones/${made.body.id}`, {
+      title: 'Learned to swim',
+      ageMin: 9,
+      ageMax: 10,
+      memoryIds: [],
+    });
+    expect(moved.body).toMatchObject({ ageMin: 9, ageMax: 10 });
+
+    const dated = await call<Milestone>('PUT', `/milestones/${made.body.id}`, {
+      title: 'Learned to swim',
+      ageMin: null,
+      ageMax: null,
+      date: `${new Date().getFullYear() - 14}-07`,
+      memoryIds: [],
+    });
+    expect(dated.body.date).toMatch(/-07$/);
+    expect(dated.body.ageMin).not.toBeNull();
+
+    const life = await call<LifePathDto>('GET', '/life-path');
+    const at = life.body.ages.find((a) => a.milestones.some((m) => m.id === made.body.id));
+    expect(at?.age).toBe(dated.body.ageMin);
+
+    const bad = await call('POST', '/milestones', {
+      title: 'x',
+      ageMin: null,
+      ageMax: null,
+      date: '2020',
+    });
+    expect(bad.status).toBe(400);
+
+    expect((await call('DELETE', `/milestones/${made.body.id}`)).status).toBe(204);
+    const list = await call<Milestone[]>('GET', '/milestones');
+    expect(list.body.some((m) => m.id === made.body.id)).toBe(false);
+  });
+
   it('really deletes a memory and its history', async () => {
     const removed = await call('DELETE', `/memories/${promiseId}`);
     expect(removed.status).toBe(204);
@@ -386,6 +473,6 @@ describe('Living Draft API', () => {
   it('rejects bad input with a readable error', async () => {
     const { status, body } = await call<{ error: string }>('POST', '/memories', { title: '' });
     expect(status).toBe(400);
-    expect(body.error).toBe('Invalid request');
+    expect(body.error).toBe('The title is empty or too short.');
   });
 });

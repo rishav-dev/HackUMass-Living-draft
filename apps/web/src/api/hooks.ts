@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AnswerDto,
+  CompareInsightDto,
   CapsuleDto,
   ChapterDto,
   CharacterDetailDto,
@@ -22,6 +23,7 @@ import type {
 } from '@living-draft/contracts';
 import type { ConnectionTypeInfo, EvaluationReport } from '@living-draft/engine';
 import { useAuthStatus } from './auth';
+import { aiReady, runAiTask } from './ai';
 import { api, query } from './client';
 
 export const keys = {
@@ -236,7 +238,17 @@ export function useVersionComparison(memoryId: string, a: string | null, b: stri
 
 export function useAsk() {
   return useMutation({
-    mutationFn: (input: { question: string; scope: object }) => api.post<AnswerDto>('/ask', input),
+    mutationFn: async (input: { question: string; scope: object }) =>
+      (await aiReady())
+        ? runAiTask<AnswerDto>('/ai/ask', input)
+        : api.post<AnswerDto>('/ask', input),
+  });
+}
+
+export function useCompareInsight() {
+  return useMutation({
+    mutationFn: async (input: { memoryIds: string[]; question?: string }) =>
+      (await aiReady()) ? runAiTask<CompareInsightDto>('/ai/compare', input) : null,
   });
 }
 

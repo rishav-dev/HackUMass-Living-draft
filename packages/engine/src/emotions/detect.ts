@@ -235,8 +235,31 @@ export const POSITIVE_EMOTIONS = new Set([
   'proud',
   'grateful',
   'nostalgic',
+  'confident',
+  'determined',
+  'hopeful',
+  'relieved',
+  'loved',
 ]);
-export const DIFFICULT_EMOTIONS = new Set(['sad', 'angry', 'anxious', 'disappointed', 'confused']);
+export const DIFFICULT_EMOTIONS = new Set([
+  'sad',
+  'angry',
+  'anxious',
+  'disappointed',
+  'confused',
+  'nervous',
+  'scared',
+  'frustrated',
+  'resentful',
+  'hurt',
+  'betrayed',
+  'lonely',
+  'embarrassed',
+  'guilty',
+  'regretful',
+  'jealous',
+  'overwhelmed',
+]);
 
 export function valence(tags: string[]): number {
   if (!tags.length) return 0;

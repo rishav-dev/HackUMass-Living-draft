@@ -40,11 +40,21 @@ async function getJson<T>(url: string): Promise<T> {
   }
 }
 
-export async function weatherNow(): Promise<WeatherNowDto | null> {
+export async function weatherNow(
+  here?: { lat: number; lon: number } | null,
+): Promise<WeatherNowDto | null> {
   const profile = findProfile();
-  if (!profile?.weatherOn || profile.placeLat === null || profile.placeLon === null) return null;
-  const lat = round(profile.placeLat);
-  const lon = round(profile.placeLon);
+  if (!profile?.weatherOn) return null;
+  const travelling = profile.locationMode === 'travel' && here;
+  if (!travelling && (profile.placeLat === null || profile.placeLon === null)) return null;
+  const lat = round(travelling ? here.lat : profile.placeLat!);
+  const lon = round(travelling ? here.lon : profile.placeLon!);
+  const away =
+    travelling &&
+    (profile.placeLat === null ||
+      profile.placeLon === null ||
+      Math.abs(lat - profile.placeLat) > 0.3 ||
+      Math.abs(lon - profile.placeLon) > 0.3);
   const key = `${lat},${lon}`;
   if (current && current.key === key && Date.now() - current.at < NOW_TTL_MS) return current.value;
   const data = await getJson<{
@@ -55,7 +65,7 @@ export async function weatherNow(): Promise<WeatherNowDto | null> {
   );
   const reading = weatherFromCode(data.current.weather_code);
   const value: WeatherNowDto = {
-    place: profile.placeName ?? 'your area',
+    place: away ? 'where you are now' : (profile.placeName ?? 'your area'),
     code: data.current.weather_code,
     kind: reading.kind,
     label: reading.label,

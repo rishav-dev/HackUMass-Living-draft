@@ -12,12 +12,34 @@ export function WorldProvider({ children }: { children: ReactNode }) {
   const { data: profile } = useProfile();
   const [now, setNow] = useState(() => new Date());
   const [intoRoom, setIntoRoom] = useState(() => readLocal('weather-room') !== 'false');
+  const travelling = profile?.weatherOn && profile.locationMode === 'travel';
+  const [here, setHere] = useState<{ lat: number; lon: number } | null>(null);
+  useEffect(() => {
+    if (!travelling || !('geolocation' in navigator)) return;
+    const look = () =>
+      navigator.geolocation.getCurrentPosition(
+        (p) =>
+          setHere({
+            lat: Math.round(p.coords.latitude * 10) / 10,
+            lon: Math.round(p.coords.longitude * 10) / 10,
+          }),
+        () => undefined,
+        { enableHighAccuracy: false, maximumAge: 30 * 60_000, timeout: 15_000 },
+      );
+    look();
+    const again = window.setInterval(look, 30 * 60_000);
+    return () => window.clearInterval(again);
+  }, [travelling]);
   const enabled = Boolean(
-    profile?.weatherOn && profile.placeLat !== null && profile.placeLon !== null,
+    profile?.weatherOn &&
+    ((profile.placeLat !== null && profile.placeLon !== null) || (travelling && here)),
   );
   const { data: weather } = useQuery({
-    queryKey: [...WEATHER_KEY, profile?.placeLat, profile?.placeLon],
-    queryFn: () => api.get<WeatherNowDto | null>('/weather/now'),
+    queryKey: [...WEATHER_KEY, profile?.placeLat, profile?.placeLon, here?.lat, here?.lon],
+    queryFn: () =>
+      api.get<WeatherNowDto | null>(
+        travelling && here ? `/weather/now?lat=${here.lat}&lon=${here.lon}` : '/weather/now',
+      ),
     enabled,
     staleTime: 10 * 60_000,
     refetchInterval: 15 * 60_000,

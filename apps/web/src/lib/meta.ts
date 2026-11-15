@@ -19,6 +19,23 @@ import {
   Wind,
   Hourglass,
   CircleDashed,
+  CloudLightning,
+  Eye,
+  EyeOff,
+  Feather,
+  Flame,
+  Ghost,
+  HeartCrack,
+  HeartHandshake,
+  Moon,
+  Mountain,
+  Scale,
+  Sunrise,
+  Target,
+  Undo2,
+  Unlink,
+  Waves,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import type { Season } from '@living-draft/contracts';
@@ -57,9 +74,56 @@ export const EMOTIONS: Record<string, EmotionMeta> = {
     tint: 'rgb(161 161 170 / 0.18)',
     ink: '#d4d4d8',
   },
+  confident: { label: 'Confident', icon: Mountain, tint: 'rgb(245 158 11 / 0.18)', ink: '#fcd34d' },
+  determined: { label: 'Determined', icon: Target, tint: 'rgb(249 115 22 / 0.18)', ink: '#fdba74' },
+  hopeful: { label: 'Hopeful', icon: Sunrise, tint: 'rgb(253 186 116 / 0.18)', ink: '#fed7aa' },
+  relieved: { label: 'Relieved', icon: Feather, tint: 'rgb(110 231 183 / 0.18)', ink: '#a7f3d0' },
+  loved: { label: 'Loved', icon: HeartHandshake, tint: 'rgb(244 114 182 / 0.18)', ink: '#fbcfe8' },
+  nervous: { label: 'Nervous', icon: Zap, tint: 'rgb(165 180 252 / 0.18)', ink: '#c7d2fe' },
+  scared: { label: 'Scared', icon: Ghost, tint: 'rgb(100 116 139 / 0.2)', ink: '#cbd5e1' },
+  frustrated: { label: 'Frustrated', icon: Flame, tint: 'rgb(239 68 68 / 0.16)', ink: '#fca5a5' },
+  resentful: {
+    label: 'Resentful',
+    icon: CloudLightning,
+    tint: 'rgb(190 18 60 / 0.18)',
+    ink: '#fda4af',
+  },
+  hurt: { label: 'Hurt', icon: HeartCrack, tint: 'rgb(225 29 72 / 0.16)', ink: '#fecdd3' },
+  betrayed: { label: 'Betrayed', icon: Unlink, tint: 'rgb(159 18 57 / 0.2)', ink: '#fb7185' },
+  lonely: { label: 'Lonely', icon: Moon, tint: 'rgb(71 85 105 / 0.22)', ink: '#bfdbfe' },
+  embarrassed: {
+    label: 'Embarrassed',
+    icon: EyeOff,
+    tint: 'rgb(251 146 160 / 0.18)',
+    ink: '#fecdd3',
+  },
+  guilty: { label: 'Guilty', icon: Scale, tint: 'rgb(120 113 108 / 0.22)', ink: '#d6d3d1' },
+  regretful: { label: 'Regretful', icon: Undo2, tint: 'rgb(139 92 246 / 0.16)', ink: '#c4b5fd' },
+  jealous: { label: 'Jealous', icon: Eye, tint: 'rgb(132 204 22 / 0.16)', ink: '#bef264' },
+  overwhelmed: {
+    label: 'Overwhelmed',
+    icon: Waves,
+    tint: 'rgb(14 165 233 / 0.16)',
+    ink: '#7dd3fc',
+  },
 };
 
-export const BASE_EMOTION_TAGS = Object.keys(EMOTIONS);
+export const BASE_EMOTION_TAGS = [
+  'happy',
+  'sad',
+  'angry',
+  'nostalgic',
+  'excited',
+  'peaceful',
+  'anxious',
+  'proud',
+  'grateful',
+  'hurt',
+  'frustrated',
+  'disappointed',
+];
+
+export const ALL_EMOTION_TAGS = Object.keys(EMOTIONS);
 
 export function emotionMeta(tag: string): EmotionMeta {
   return (
@@ -198,4 +262,16 @@ export function initials(name: string): string {
   return parts.length === 1
     ? parts[0]!.slice(0, 2)
     : `${parts[0]![0]}${parts[parts.length - 1]![0]}`;
+}
+
+export const TIME_SPANS = [
+  { kind: 'one moment', label: 'A moment' },
+  { kind: 'one day', label: 'One day' },
+  { kind: 'a few days', label: 'A few days' },
+  { kind: 'weeks or months', label: 'Weeks or months' },
+  { kind: 'kept happening', label: 'It kept happening' },
+] as const;
+
+export function timeSpanLabel(kind: string): string | null {
+  return TIME_SPANS.find((s) => s.kind === kind)?.label ?? null;
 }

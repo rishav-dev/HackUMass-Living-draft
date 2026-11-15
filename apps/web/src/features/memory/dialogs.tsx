@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Segmented, TextArea, TextInput, Toggle } from '../../components/ui/controls';
 import { useToast } from '../../components/ui/Toast';
-import { BASE_EMOTION_TAGS, emotionMeta } from '../../lib/meta';
+import { ALL_EMOTION_TAGS, emotionMeta } from '../../lib/meta';
 import { PlacementEditor } from '../capture/PlacementEditor';
 import { useWorld } from '../../lib/world/world';
 
@@ -198,7 +198,7 @@ export function EditDetailsDialog({
               className="h-9 w-52 py-1 text-sm"
             />
             <datalist id="edit-feelings">
-              {BASE_EMOTION_TAGS.map((t) => (
+              {ALL_EMOTION_TAGS.map((t) => (
                 <option key={t} value={t}>
                   {emotionMeta(t).label}
                 </option>

@@ -145,6 +145,22 @@ export const NOT_NAMES = new Set(
     .filter(Boolean),
 );
 
+export const PLACE_WORDS = new Set(
+  `alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii
+  idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts michigan
+  minnesota mississippi missouri montana nebraska nevada hampshire jersey mexico york carolina dakota
+  ohio oklahoma oregon pennsylvania rhode tennessee texas utah vermont virginia washington wisconsin
+  wyoming boston amherst edison chicago seattle portland denver austin houston dallas atlanta miami
+  philadelphia pittsburgh baltimore brooklyn manhattan queens bronx jersey cape may blacksburg angeles
+  diego francisco jose sacramento vegas phoenix india delhi mumbai bombay bangalore bengaluru chennai
+  kolkata hyderabad pune gurgaon gurugram gwalior noida jaipur lucknow agra goa kerala punjab canada
+  toronto vancouver montreal london paris berlin rome madrid tokyo seoul beijing shanghai singapore
+  dubai sydney melbourne america usa england britain uk ireland scotland wales germany france italy
+  spain japan china korea pakistan nepal bangladesh africa europe asia australia brazil`
+    .split(/\s+/)
+    .filter(Boolean),
+);
+
 export const DRIVER_VERBS = [
   'promised',
   'decided',

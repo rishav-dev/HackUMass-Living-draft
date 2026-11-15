@@ -6,6 +6,11 @@ import { config } from './config';
 import { HttpError } from './lib/http';
 import { apiRouter } from './modules/routes';
 import { voiceRouter } from './modules/voice/voice.routes';
+import { withHosted } from './modules/ai/hosted';
+import { localRunner } from './modules/ai/llm';
+import { useAiRunner } from './modules/ai/runner';
+import { useMailer } from './modules/auth/mailer';
+import { nodeMailer } from './modules/auth/node-mailer';
 import { isConfigured, sessionValid } from './modules/auth/auth.service';
 
 const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
@@ -26,8 +31,11 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
 };
 
 export function createApp() {
+  useAiRunner(withHosted(localRunner));
+  useMailer(nodeMailer());
   const app = express();
   app.disable('x-powered-by');
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
   app.use(express.json({ limit: '2mb' }));
 
   app.use('/media', (req, res, next) =>

@@ -1,29 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { CaptureAnalysisDto, PersonDecision, TemporalInput } from '@living-draft/contracts';
+import type { PersonDecision, TemporalInput } from '@living-draft/contracts';
 import { ageOnDate, seasonForMonth } from '@living-draft/engine';
 import { config } from '../config';
-import { all, closeDatabase, openDatabase, run } from '../db/database';
+import { all, closeDatabase, get, openDatabase, run } from '../db/database';
 import { newId } from '../lib/http';
-import { generateArt } from '../modules/art/art.service';
+import { fetchPaced, generateArt } from '../modules/art/art.service';
 import { setPassphrase } from '../modules/auth/auth.service';
-import { addVersion, analyzeCapture, createMemory } from '../modules/capture/capture.service';
-import { suggestAndStore, updateConnection } from '../modules/connections/connection.service';
+import { addVersion, createMemory } from '../modules/capture/capture.service';
+import { createConnection } from '../modules/connections/connection.service';
 import { lifePath, days } from '../modules/lifepath/lifepath.service';
 import { insertMedia } from '../modules/media/media.repository';
+import { attachMedia } from '../modules/memories/memory.service';
 import { createMilestone } from '../modules/milestones/milestone.service';
 import { createProfile, findProfile, updateProfile } from '../modules/profile/profile.repository';
 import { createReflection } from '../modules/reflections/reflection.service';
 import {
-  SAMPLE_CAPSULES,
-  SAMPLE_MEMORIES,
-  SAMPLE_MILESTONES,
-  SAMPLE_PASSPHRASE,
-  SAMPLE_PLACE,
-  SAMPLE_PROFILE,
-  SAMPLE_REFLECTION,
-} from './sample-archive';
+  KINJAL_ACCOUNT,
+  KINJAL_CAPSULES,
+  KINJAL_MEMORIES,
+  KINJAL_MILESTONES,
+  KINJAL_PLACE_COORDS,
+  KINJAL_REFLECTION,
+  KINJAL_THREADS,
+} from './kinjal';
+import type { SampleMemory } from './kinjal-types';
+import { SAMPLE_PASSPHRASE, SAMPLE_PLACE, SAMPLE_PROFILE } from './sample-archive';
 import { fireCrackle, oceanWaves, pianoNote, rainOnPorch } from './sound';
 
 const force = process.argv.includes('--force');
@@ -45,6 +48,7 @@ To replace it with the fresh sample, run "npm run seed -- --force" (that erases 
 }
 fs.rmSync(config.mediaDir, { recursive: true, force: true });
 fs.mkdirSync(config.mediaDir, { recursive: true });
+fs.rmSync(config.voiceDir, { recursive: true, force: true });
 openDatabase(config.databaseFile);
 
 function writeFile(contents: Buffer, ext: string) {
@@ -62,133 +66,230 @@ function daysAgo(days: number, hour = 19): string {
   return date.toISOString();
 }
 
-function decide(analysis: CaptureAnalysisDto): PersonDecision[] {
-  return analysis.people.map((person) => ({
-    label: person.suggestion?.name ?? person.label,
-    surfaces: person.surfaces,
-    characterId: person.suggestion?.characterId ?? null,
-    relationship: person.relationship,
-    role: person.role,
-    roleEvidence: person.roleEvidence,
-    addAlias: true,
-  }));
-}
+const ageAt = (y: number, m: number, d: number) =>
+  ageOnDate(SAMPLE_PROFILE.birthDate, new Date(Date.UTC(y, m - 1, d)));
 
-function exactDate(date: string): TemporalInput {
-  const [year, month, day] = date.split('-').map(Number) as [number, number, number];
-  const age = ageOnDate(SAMPLE_PROFILE.birthDate, new Date(Date.UTC(year, month - 1, day)));
+function temporalFor(memory: SampleMemory): TemporalInput {
+  const base = { evidence: [], confirmed: true, approximate: false };
+  const when = memory.when;
+  if ('date' in when) {
+    const [y, m, d] = when.date.split('-').map(Number) as [number, number, number];
+    const age = ageAt(y, m, d);
+    return {
+      ...base,
+      precision: 'exact',
+      ageMin: age,
+      ageMax: age,
+      year: y,
+      month: m,
+      day: d,
+      season: seasonForMonth(m, SAMPLE_PROFILE.hemisphere),
+      confidence: 'high',
+      explanation: 'You gave the date.',
+    };
+  }
+  if ('month' in when) {
+    const [y, m] = when.month.split('-').map(Number) as [number, number];
+    const first = ageAt(y, m, 1);
+    const last = ageAt(y, m, 28);
+    return {
+      ...base,
+      precision: 'month',
+      ageMin: first,
+      ageMax: last,
+      year: y,
+      month: m,
+      day: null,
+      season: seasonForMonth(m, SAMPLE_PROFILE.hemisphere),
+      confidence: 'high',
+      explanation: 'You gave the month and year.',
+    };
+  }
+  if ('ages' in when) {
+    const [from, to] = when.ages;
+    return {
+      ...base,
+      precision: from === to ? (when.season ? 'season_age' : 'age') : 'age_range',
+      ageMin: from,
+      ageMax: to,
+      year: null,
+      month: null,
+      day: null,
+      season: when.season ?? null,
+      approximate: true,
+      confidence: 'medium',
+      explanation:
+        from === to
+          ? `You said you were about ${from}.`
+          : `You said this went on from about ${from} to ${to}.`,
+    };
+  }
   return {
-    precision: 'exact',
-    ageMin: age,
-    ageMax: age,
-    year,
-    month,
-    day,
-    season: seasonForMonth(month, SAMPLE_PROFILE.hemisphere),
-    approximate: false,
-    confidence: 'high',
-    explanation: 'You gave the exact date.',
-    evidence: [],
-    confirmed: true,
+    ...base,
+    precision: 'unknown',
+    ageMin: null,
+    ageMax: null,
+    year: null,
+    month: null,
+    day: null,
+    season: null,
+    confidence: 'low',
+    explanation: 'No time was given.',
   };
 }
 
 setPassphrase(SAMPLE_PASSPHRASE);
+run(
+  'UPDATE auth SET email = ?, display_name = ?, verified_at = ?, two_step = 0 WHERE id = 1',
+  KINJAL_ACCOUNT.email,
+  KINJAL_ACCOUNT.name,
+  new Date().toISOString(),
+);
 createProfile(SAMPLE_PROFILE, { isSample: true });
-updateProfile(SAMPLE_PLACE);
+updateProfile({ ...SAMPLE_PLACE, locationMode: 'home' });
+
 const milestoneIds = new Map(
-  SAMPLE_MILESTONES.map((m) => [m.title, createMilestone({ ...m, memoryIds: [] }).id]),
+  KINJAL_MILESTONES.map((m) => [m.title, createMilestone({ ...m, memoryIds: [] }).id]),
 );
 const memoryIds = new Map<string, string>();
+const people = new Map<string, string>();
 
-for (const sample of SAMPLE_MEMORIES) {
-  const analysis = analyzeCapture({ text: sample.text, kind: 'memory' });
+function decisions(memory: SampleMemory, text: string): PersonDecision[] {
+  return memory.people.map((person) => {
+    const surfaces = [...new Set([person.name, ...person.said])].filter((s) => text.includes(s));
+    return {
+      label: person.name,
+      surfaces: surfaces.length ? surfaces : [person.name],
+      characterId: people.get(person.name) ?? null,
+      relationship: person.relationship ?? null,
+      role: person.role,
+      addAlias: true,
+    };
+  });
+}
+
+function remember(memoryId: string) {
+  for (const row of all<{ id: string; name: string }>(
+    `SELECT DISTINCT c.id, c.name FROM characters c JOIN character_mentions m ON m.character_id = c.id
+     WHERE m.memory_id = ?`,
+    memoryId,
+  ))
+    if (!people.has(row.name)) people.set(row.name, row.id);
+}
+
+const photos: Array<{ memoryId: string; scene: string; caption: string }> = [];
+
+for (const memory of KINJAL_MEMORIES) {
   const mediaIds: string[] = [];
-  if (sample.sound) {
-    const { fileName, size } = writeFile(sounds[sample.sound](), '.wav');
+  if (memory.sound) {
+    const { fileName, size } = writeFile(sounds[memory.sound](), '.wav');
     mediaIds.push(
       insertMedia({
         fileName,
-        originalName: `${sample.sound}.wav`,
+        originalName: `${memory.sound}.wav`,
         mimeType: 'audio/wav',
         sizeBytes: size,
         kind: 'audio',
-        caption: sample.soundCaption ?? null,
-        durationMs: lengths[sample.sound] * 1000,
+        caption: memory.soundCaption ?? null,
+        durationMs: lengths[memory.sound] * 1000,
       }).id,
     );
   }
-
   const { memoryId } = createMemory({
-    title: sample.title ?? analysis.title,
-    originalText: sample.text,
-    readingCopy: analysis.readingCopy,
-    sourceKind: sample.sourceKind,
-    temporal: sample.date
-      ? exactDate(sample.date)
-      : { ...analysis.temporal, confirmed: analysis.temporal.certainty !== 'unplaced' },
-    people: decide(analysis),
-    emotions: analysis.emotions.map((e) => ({
-      tag: e.tag,
-      phase: e.phase,
+    title: memory.title,
+    originalText: memory.raw,
+    readingCopy: memory.story,
+    sourceKind: memory.sourceKind,
+    temporal: temporalFor(memory),
+    people: decisions(memory, memory.story),
+    emotions: memory.feelings.map(([tag, phase]) => ({
+      tag,
+      phase,
       source: 'suggested' as const,
-      evidence: e.quote,
+      evidence: null,
     })),
-    milestoneIds: sample.milestone ? [milestoneIds.get(sample.milestone)!] : [],
+    milestoneIds:
+      memory.milestone && milestoneIds.has(memory.milestone)
+        ? [milestoneIds.get(memory.milestone)!]
+        : [],
     newMilestones: [],
     mediaIds,
-    sensitive: sample.sensitive ?? false,
+    sensitive: memory.sensitive ?? false,
+    place: memory.places[0] ?? null,
+    understanding: {
+      summary: memory.summary,
+      time: memory.time,
+      themes: (memory.themes ?? []).map(([theme, evidence]) => ({ theme, evidence })),
+      followups: (memory.questions ?? []).map(([question, answer]) => ({ question, answer })),
+      places: memory.places.map((name) => ({ name, kind: null })),
+    },
   });
-  memoryIds.set(sample.key, memoryId);
-  if (sample.place) run('UPDATE memories SET place = ? WHERE id = ?', sample.place, memoryId);
+  memoryIds.set(memory.key, memoryId);
+  remember(memoryId);
   run(
     'UPDATE memory_versions SET recorded_at = ?, created_at = ? WHERE memory_id = ?',
-    daysAgo(sample.recordedDaysAgo),
-    daysAgo(sample.recordedDaysAgo),
+    daysAgo(memory.recordedDaysAgo),
+    daysAgo(memory.recordedDaysAgo),
     memoryId,
   );
   run(
     'UPDATE memories SET created_at = ?, updated_at = ? WHERE id = ?',
-    daysAgo(sample.recordedDaysAgo),
-    daysAgo(sample.recordedDaysAgo),
+    daysAgo(memory.recordedDaysAgo),
+    daysAgo(memory.recordedDaysAgo),
+    memoryId,
+  );
+  run(
+    'UPDATE memory_questions SET asked_at = ? WHERE memory_id = ?',
+    daysAgo(memory.recordedDaysAgo),
     memoryId,
   );
 
-  for (const retelling of sample.retellings ?? []) {
-    const next = analyzeCapture({ text: retelling.text, kind: 'memory', memoryId });
+  for (const telling of memory.tellings ?? []) {
     const { versionId } = addVersion(memoryId, {
-      originalText: retelling.text,
-      readingCopy: next.readingCopy,
-      sourceKind: 'speech',
-      mode: retelling.mode,
-      people: decide(next),
-      emotions: next.emotions.map((e) => ({
-        tag: e.tag,
-        phase: e.phase,
-        source: 'suggested' as const,
-        evidence: e.quote,
-      })),
+      originalText: telling.raw,
+      readingCopy: telling.story,
+      sourceKind: telling.sourceKind ?? 'speech',
+      mode: 'addition',
+      people: decisions(memory, telling.story).filter((p) =>
+        p.surfaces.some((s) => telling.story.includes(s)),
+      ),
+      emotions: [],
       mediaIds: [],
     });
     run(
       'UPDATE memory_versions SET recorded_at = ?, created_at = ? WHERE id = ?',
-      daysAgo(retelling.recordedDaysAgo),
-      daysAgo(retelling.recordedDaysAgo),
+      daysAgo(telling.recordedDaysAgo),
+      daysAgo(telling.recordedDaysAgo),
       versionId,
     );
+    run(
+      'UPDATE memories SET updated_at = ? WHERE id = ?',
+      daysAgo(telling.recordedDaysAgo),
+      memoryId,
+    );
   }
+  run('DELETE FROM review_items WHERE memory_id = ?', memoryId);
+  run("UPDATE memories SET review_status = 'ok' WHERE id = ?", memoryId);
+  for (const photo of memory.photos ?? []) photos.push({ memoryId, ...photo });
 }
 
-run('UPDATE characters SET provisional = 0 WHERE name <> ?', 'Biscuit');
+run('UPDATE characters SET provisional = 0');
+run(
+  'UPDATE memories SET bookmarked_at = ? WHERE id IN (?, ?, ?)',
+  new Date().toISOString(),
+  memoryIds.get('raise')!,
+  memoryIds.get('nani-garden')!,
+  memoryIds.get('not-the-team')!,
+);
 
 const reflection = createReflection({
-  originalText: SAMPLE_REFLECTION.text,
-  readingCopy: SAMPLE_REFLECTION.text,
-  memoryIds: [memoryIds.get(SAMPLE_REFLECTION.memoryKey)!],
+  originalText: KINJAL_REFLECTION.text,
+  readingCopy: KINJAL_REFLECTION.text,
+  memoryIds: [memoryIds.get(KINJAL_REFLECTION.memoryKey)!],
 });
 run('UPDATE reflections SET recorded_at = ? WHERE id = ?', daysAgo(5), reflection.id);
 
-for (const capsule of SAMPLE_CAPSULES) {
+for (const capsule of KINJAL_CAPSULES) {
   run(
     `INSERT INTO capsules (id, title, original_text, body, authored_at, authored_age, unlock_kind, unlock_date, unlock_milestone, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -205,45 +306,71 @@ for (const capsule of SAMPLE_CAPSULES) {
   );
 }
 
-const pinned = [
-  ['full_circle', 'The lunch table', 'Lunch with Priya'],
-  ['wish_fulfilled', 'Drawing the ocean', 'Finally, the ocean'],
-  ['breaking_pattern', 'When Dad picked my major', 'Asking for the raise'],
-  ['relationship_change', "Mom's promise", 'Moving day with Mom'],
-];
-const suggested = suggestAndStore();
-for (const connection of suggested) {
-  const titles = connection.endpoints.map((e) => e.title);
-  if (
-    pinned.some(
-      ([type, a, b]) => type === connection.type && titles.includes(a!) && titles.includes(b!),
-    )
-  ) {
-    updateConnection(connection.id, { status: 'confirmed' });
-  }
+function evidence(memoryId: string, quote: string) {
+  const text =
+    get<{ composed_text: string }>(
+      'SELECT v.composed_text FROM memories m JOIN memory_versions v ON v.id = m.current_version_id WHERE m.id = ?',
+      memoryId,
+    )?.composed_text ?? '';
+  const at = text.indexOf(quote);
+  if (at < 0) throw new Error(`Quote not found: "${quote}"`);
+  return { memoryId, quote, start: at, end: at + quote.length };
 }
 
+for (const thread of KINJAL_THREADS) {
+  const from = memoryIds.get(thread.from)!;
+  const to = memoryIds.get(thread.to)!;
+  createConnection({
+    type: thread.type,
+    explanation: thread.explanation,
+    status: thread.status,
+    note: null,
+    memoryIds: [from, to],
+    evidence: [evidence(from, thread.fromQuote), evidence(to, thread.toQuote)],
+  });
+}
+
+for (const [name, [lat, lon]] of Object.entries(KINJAL_PLACE_COORDS))
+  run('UPDATE places SET lat = ?, lon = ? WHERE name = ? COLLATE NOCASE', lat, lon, name);
+
 const counts = all<{ kind: string; n: number }>(
-  `SELECT 'memories' AS kind, COUNT(*) AS n FROM memories UNION ALL SELECT 'people', COUNT(*) FROM characters
-   UNION ALL SELECT 'connections', COUNT(*) FROM connections UNION ALL SELECT 'files', COUNT(*) FROM media_assets`,
+  `SELECT 'memories' AS kind, COUNT(*) AS n FROM memories UNION ALL SELECT 'tellings', COUNT(*) FROM memory_versions
+   UNION ALL SELECT 'people', COUNT(*) FROM characters UNION ALL SELECT 'places', COUNT(*) FROM places
+   UNION ALL SELECT 'threads', COUNT(*) FROM connections UNION ALL SELECT 'questions', COUNT(*) FROM memory_questions`,
 );
 console.log(
-  `Sample archive ready for ${SAMPLE_PROFILE.preferredName} (fictional). Passphrase: ${SAMPLE_PASSPHRASE}`,
+  `Sample archive ready for ${SAMPLE_PROFILE.preferredName} (fictional). Sign in with ${KINJAL_ACCOUNT.email} / ${SAMPLE_PASSPHRASE}, or use "Explore the demo".`,
 );
 for (const { kind, n } of counts) console.log(`  ${n} ${kind}`);
 console.log(`  ${days().length} dated days, ${lifePath().unplacedCount} unplaced`);
-for (const connection of suggested)
-  console.log(
-    `  link: ${connection.label} - ${connection.endpoints.map((e) => e.title).join(' / ')}`,
-  );
 
 if (!skipArt) {
+  console.log(`Painting ${photos.length} photos for the sample (scene words only)…`);
+  for (const [i, photo] of photos.entries()) {
+    try {
+      const data = await fetchPaced(photo.scene, 7000 + i);
+      const { fileName, size } = writeFile(data, '.jpg');
+      const media = insertMedia({
+        fileName,
+        originalName: `${photo.caption}.jpg`,
+        mimeType: 'image/jpeg',
+        sizeBytes: size,
+        kind: 'photo',
+        caption: photo.caption,
+        durationMs: null,
+      });
+      attachMedia(photo.memoryId, [media.id]);
+      process.stdout.write('.');
+    } catch {
+      process.stdout.write('x');
+    }
+  }
   const keys = [
     ...days().map((d) => d.artKey),
     ...[...memoryIds.values()].map((id) => `memory:${id}`),
   ];
   console.log(
-    `Generating scene art for ${keys.length} days and memories (free tier allows one every ~45s). Ctrl+C to stop; \`npm run art\` picks up the rest later.`,
+    `\nGenerating scene art for ${keys.length} days and memories (free tier allows one every ~45s). Ctrl+C to stop; \`npm run art\` picks up the rest later.`,
   );
   let made = 0;
   for (const key of keys) {

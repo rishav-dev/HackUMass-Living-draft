@@ -44,6 +44,8 @@ import { readLocal, writeLocal } from '../../lib/storage';
 import { useScene } from '../../lib/sound/SoundProvider';
 import { DevicesSection } from './DevicesSection';
 import { PlaceSection } from './PlaceSection';
+import { WritingHelperSection } from './WritingHelperSection';
+import { AccountSection } from './AccountSection';
 
 function Section({
   title,
@@ -236,6 +238,10 @@ function SettingsView({ profile }: { profile: ProfileDto }) {
             </div>
           </div>
         </Section>
+
+        <AccountSection />
+
+        <WritingHelperSection />
 
         <LockSection minutes={profile.autoLockMinutes} />
 
@@ -447,8 +453,8 @@ function LockSection({ minutes }: { minutes: number }) {
         setForm({ current: '', next: '', confirm: '' });
         toast(
           configured
-            ? 'Passphrase changed. Other sessions were signed out.'
-            : 'Locked with your new passphrase.',
+            ? 'Password changed. Other devices were signed out.'
+            : 'Locked with your new password.',
         );
       },
     };
@@ -466,7 +472,7 @@ function LockSection({ minutes }: { minutes: number }) {
         }}
       >
         {configured && (
-          <Field label="Current passphrase" htmlFor="pp-current">
+          <Field label="Current password" htmlFor="pp-current">
             <TextInput
               id="pp-current"
               type="password"
@@ -477,7 +483,7 @@ function LockSection({ minutes }: { minutes: number }) {
           </Field>
         )}
         <Field
-          label={configured ? 'New passphrase' : 'Passphrase'}
+          label={configured ? 'New password' : 'Password'}
           htmlFor="pp-next"
           hint="At least 8 characters."
         >
@@ -504,7 +510,7 @@ function LockSection({ minutes }: { minutes: number }) {
         </Field>
         <div className="flex flex-wrap items-center gap-3 sm:col-span-3">
           <Button type="submit" disabled={!valid || pending}>
-            {configured ? 'Change passphrase' : 'Set passphrase'}
+            {configured ? 'Change password' : 'Set a password'}
           </Button>
           {configured && (
             <Button

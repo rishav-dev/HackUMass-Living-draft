@@ -1,5 +1,11 @@
-const CACHE = 'living-draft-shell-v1';
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const CACHE = 'living-draft-shell-v2';
+const BASE = new URL(self.registration.scope).pathname;
+const SHELL = [
+  BASE,
+  `${BASE}manifest.webmanifest`,
+  `${BASE}icons/icon-192.png`,
+  `${BASE}icons/icon-512.png`,
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -32,10 +38,10 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          void caches.open(CACHE).then((cache) => cache.put('/', copy));
+          void caches.open(CACHE).then((cache) => cache.put(BASE, copy));
           return response;
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match(BASE)),
     );
     return;
   }
@@ -47,7 +53,7 @@ self.addEventListener('fetch', (event) => {
         fetch(request).then((response) => {
           if (
             response.ok &&
-            (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/'))
+            (url.pathname.startsWith(`${BASE}assets/`) || url.pathname.startsWith(`${BASE}icons/`))
           ) {
             const copy = response.clone();
             void caches.open(CACHE).then((cache) => cache.put(request, copy));

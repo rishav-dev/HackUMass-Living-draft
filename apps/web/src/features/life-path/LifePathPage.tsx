@@ -1,30 +1,61 @@
-import { useMemo } from 'react';
-import { Link } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { CalendarHeart, Sparkles, TriangleAlert } from 'lucide-react';
-import type { AgeNodeDto, LifePathDto } from '@living-draft/contracts';
+import { CalendarHeart, Flag, Sparkles, TriangleAlert } from 'lucide-react';
+import type { AgeNodeDto, LifePathDto, MilestoneDto } from '@living-draft/contracts';
 import { greetingLine, momentPrompts } from '@living-draft/engine';
-import { useLifePath } from '../../api/hooks';
+import { useLifePath, useMilestones } from '../../api/hooks';
 import { Core } from '../../components/core/Core';
+import { MilestoneDialog } from '../../components/milestones/MilestoneDialog';
 import { Button } from '../../components/ui/Button';
 import { ErrorState, PaperLoading } from '../../components/ui/states';
-import { plural } from '../../lib/format';
+import { formatMilestoneDate, plural } from '../../lib/format';
 import { emotionMeta, hashNumber } from '../../lib/meta';
 import { useAtmosphere } from '../../lib/mood/atmosphere';
 import { useMotionAllowed } from '../../lib/motion';
 import { useSound } from '../../lib/sound/SoundProvider';
 import { useWorld } from '../../lib/world/world';
-import { openPlayback } from '../playback/playbackStore';
-import { DayStrip } from '../days/DayStrip';
 import { Impulses } from './Impulses';
 import { OpenQuestions } from './OpenQuestions';
+import { HomeSearch, RecentAndSaved } from './HomeSections';
 
-const SPACING = 150;
+const MIN_GAP = 128;
 const TOP = 200;
 const BOTTOM = 160;
+const FUTURE_SIZE = 48;
 
-function xFor(index: number) {
-  return 50 + Math.sin(index * 0.78 + 0.6) * 24;
+function nodeSize(node: AgeNodeDto) {
+  return node.memoryCount > 0 ? 56 + Math.min(30, node.memoryCount * 6) : 30;
+}
+
+function labelHeight(node: AgeNodeDto) {
+  return 26 + 18 + node.milestones.length * 34 + (node.uncertainCount > 0 ? 16 : 0);
+}
+
+function reach(node: AgeNodeDto, current: boolean) {
+  const size = nodeSize(node);
+  const body = Math.max(size / 2 + 22, labelHeight(node) / 2 + 6);
+  return {
+    above: current ? Math.max(body, size * 0.95, size / 2 + 108) : body,
+    below: current ? Math.max(body, size * 0.95) : body,
+  };
+}
+
+function xFor(index: number, narrow: boolean) {
+  const wave = Math.sin(index * 0.78 + 0.6);
+  return narrow ? 22 + wave * 8 : 50 + wave * 24;
+}
+
+function useNarrow() {
+  const query = '(max-width: 639px)';
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const list = window.matchMedia(query);
+    const update = () => setNarrow(list.matches);
+    list.addEventListener('change', update);
+    return () => list.removeEventListener('change', update);
+  }, []);
+  return narrow;
 }
 
 function pathData(points: Array<{ x: number; y: number }>) {
@@ -55,11 +86,28 @@ function PathView({ data }: { data: LifePathDto }) {
   const world = useWorld();
   const nudge = momentPrompts(world.part, world.kind)[0];
   const motionAllowed = useMotionAllowed();
+  const navigate = useNavigate();
   const chapters = useMemo(() => [...data.ages].reverse(), [data.ages]);
   const future = useMemo(() => [...data.future].reverse(), [data.future]);
+  const { data: allMilestones } = useMilestones();
+  const [editing, setEditing] = useState<MilestoneDto | 'new' | null>(null);
   const rows = future.length + chapters.length;
-  const height = TOP + Math.max(0, rows - 1) * SPACING + BOTTOM;
-  const points = Array.from({ length: rows }, (_, i) => ({ x: xFor(i), y: TOP + i * SPACING }));
+  const extents = [
+    ...future.map(() => ({ above: FUTURE_SIZE / 2 + 16, below: FUTURE_SIZE / 2 + 16 })),
+    ...chapters.map((node) => reach(node, node.age === profile.currentAge)),
+  ];
+  const ys: number[] = [];
+  extents.forEach((extent, i) => {
+    if (i === 0) ys.push(TOP);
+    else ys.push(ys[i - 1]! + Math.max(MIN_GAP, extents[i - 1]!.below + extent.above + 18));
+  });
+  const height = (ys[rows - 1] ?? TOP) + BOTTOM;
+  const narrow = useNarrow();
+  const points = Array.from({ length: rows }, (_, i) => ({ x: xFor(i, narrow), y: ys[i]! }));
+  const openMilestone = (id: string) => {
+    const found = allMilestones?.find((m) => m.id === id);
+    if (found) setEditing(found);
+  };
   const futurePath = pathData(points.slice(0, future.length + 1));
   const pastPath = pathData(points.slice(future.length));
   const filled = data.ages.filter((a) => a.memoryCount > 0).length;
@@ -103,23 +151,30 @@ function PathView({ data }: { data: LifePathDto }) {
           )}
         </p>
         <h1 className="mt-2 max-w-3xl text-4xl font-semibold leading-[1.05] sm:text-6xl">
-          Your life, <span className="aurora-text">one memory at a time</span>
+          Your life, <span className="aurora-text">year by year</span>
         </h1>
         <p className="mt-4 max-w-xl text-ink-soft">
           {data.totalMemories
-            ? `${plural(data.totalMemories, 'memory', 'memories')} so far, across ${plural(filled, 'year')} of your life. Open any year you like, even the empty ones. They aren't missing, just waiting.`
-            : 'Every year of your life is here, waiting. Start with whatever comes to mind. Order doesn’t matter.'}
+            ? `${plural(data.totalMemories, 'memory', 'memories')} so far, across ${plural(filled, 'year')} of your life. Open any year to see what's there, or add to one that's empty.`
+            : 'Every year of your life has a place here. Start with whatever comes to mind; order doesn’t matter.'}
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           {data.totalMemories > 0 && (
             <Button
-              onClick={() => openPlayback({})}
+              onClick={() => void navigate('/map', { viewTransition: true })}
               icon={<Sparkles className="size-4" />}
               sound="zoomIn"
             >
               Walk through it all
             </Button>
           )}
+          <Button
+            variant="secondary"
+            onClick={() => setEditing('new')}
+            icon={<Flag className="size-4" />}
+          >
+            Add a milestone
+          </Button>
           {data.needsReviewCount > 0 && (
             <Link
               to="/search?collection=needs_review"
@@ -165,11 +220,8 @@ function PathView({ data }: { data: LifePathDto }) {
             </div>
           </div>
         )}
+        <HomeSearch />
       </section>
-
-      <DayStrip />
-
-      <OpenQuestions unplaced={data.unplacedCount} />
 
       <nav
         aria-label="Jump along the path"
@@ -237,7 +289,7 @@ function PathView({ data }: { data: LifePathDto }) {
         {motionAllowed && <Impulses d={pastPath} height={height} />}
 
         <p className="absolute inset-x-0 top-6 text-center">
-          <span className="eyebrow">chapters still being written</span>
+          <span className="eyebrow">years still to come</span>
         </p>
 
         {future.map((age, i) => (
@@ -262,14 +314,29 @@ function PathView({ data }: { data: LifePathDto }) {
               x={point.x}
               y={point.y}
               current={node.age === profile.currentAge}
+              onMilestone={openMilestone}
+              narrow={narrow}
             />
           );
         })}
       </div>
 
-      <section className="mx-auto max-w-3xl px-5 pb-10 text-center">
+      <section className="mx-auto max-w-3xl px-5 pb-4 text-center">
         <span className="eyebrow">where it all starts</span>
       </section>
+
+      <RecentAndSaved />
+
+      <div className="pb-16">
+        <OpenQuestions unplaced={data.unplacedCount} />
+      </div>
+      {editing && (
+        <MilestoneDialog
+          key={editing === 'new' ? 'new' : editing.id}
+          milestone={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -279,18 +346,22 @@ function Neuron({
   x,
   y,
   current,
+  onMilestone,
+  narrow,
 }: {
   node: AgeNodeDto;
   x: number;
   y: number;
   current: boolean;
+  onMilestone: (id: string) => void;
+  narrow: boolean;
 }) {
   const { play } = useSound();
   const filled = node.memoryCount > 0;
-  const labelLeft = x > 55;
+  const labelLeft = !narrow && x > 55;
   const color = colorFor(node);
   const uncertain = node.uncertainCount > 0;
-  const size = filled ? 56 + Math.min(30, node.memoryCount * 6) : 30;
+  const size = nodeSize(node);
   const sparks = Math.min(node.memoryCount, 7);
 
   return (
@@ -350,11 +421,9 @@ function Neuron({
         </svg>
       )}
       {current && (
-        <Core
-          state="ready"
-          size={size * 1.9}
-          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-80"
-        />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-80">
+          <Core state="ready" size={size * 1.9} />
+        </div>
       )}
       <Link
         to={`/chapters/${node.age}`}
@@ -419,27 +488,54 @@ function Neuron({
         )}
       </Link>
       <div
-        className={`pointer-events-none absolute top-1/2 w-48 -translate-y-1/2 ${labelLeft ? 'right-full mr-6 text-right' : 'left-full ml-6'}`}
-        aria-hidden="true"
+        className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${narrow ? '' : 'w-[min(16rem,38vw)]'} ${labelLeft ? 'right-full mr-5 text-right' : 'left-full ml-5'}`}
+        style={
+          narrow ? { width: `calc(${100 - x}vw - ${Math.round(size / 2) + 40}px)` } : undefined
+        }
       >
-        <p
-          className={`font-display font-semibold leading-tight ${filled ? 'text-lg text-snow' : 'text-sm text-ink-faint'}`}
-        >
-          {node.title}
-        </p>
-        {filled ? (
-          <p className="text-xs font-semibold text-ink-soft">
-            {plural(node.memoryCount, 'memory', 'memories')}
-            {node.people.length ? ` · ${node.people.slice(0, 2).join(', ')}` : ''}
-            {node.milestones[0] ? ` · ${node.milestones[0].title}` : ''}
+        <div aria-hidden="true">
+          <p
+            className={`font-display font-semibold leading-tight ${filled ? 'text-lg text-snow' : 'text-sm text-ink-faint'}`}
+          >
+            {node.title}
           </p>
-        ) : (
-          <p className="text-xs font-semibold text-ink-faint opacity-0 transition group-hover:opacity-100">
-            Add a memory
-          </p>
-        )}
-        {uncertain && (
-          <p className="text-[0.7rem] font-bold text-gold/80">{node.uncertainCount} estimated</p>
+          {filled ? (
+            <p className="text-xs font-semibold text-ink-soft">
+              {plural(node.memoryCount, 'memory', 'memories')}
+              {node.people.length ? ` · ${node.people.slice(0, 2).join(', ')}` : ''}
+            </p>
+          ) : (
+            <p className="text-xs font-semibold text-ink-faint opacity-0 transition group-hover:opacity-100">
+              Add a memory
+            </p>
+          )}
+          {uncertain && (
+            <p className="text-[0.7rem] font-bold text-gold/80">{node.uncertainCount} estimated</p>
+          )}
+        </div>
+        {node.milestones.length > 0 && (
+          <ul
+            aria-label={`Milestones at ${node.age}`}
+            className={`mt-1.5 flex flex-col gap-1 ${labelLeft ? 'items-end' : 'items-start'}`}
+          >
+            {node.milestones.map((m) => (
+              <li key={m.id} className="max-w-full">
+                <button
+                  type="button"
+                  onClick={() => onMilestone(m.id)}
+                  className="pointer-events-auto inline-flex max-w-full items-center gap-1.5 rounded-2xl border border-gold/40 bg-gold/12 px-2.5 py-0.5 text-left text-xs font-bold text-gold transition hover:border-gold hover:bg-gold/20"
+                >
+                  <Flag className="size-3 shrink-0" aria-hidden="true" />
+                  <span>{m.title}</span>
+                  {m.date && (
+                    <span className="hidden shrink-0 font-semibold text-gold/70 sm:inline">
+                      {formatMilestoneDate(m.date)}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

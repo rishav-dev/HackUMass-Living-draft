@@ -47,6 +47,7 @@ export function LiveScene({
     if (narrate) setLineIndex(0);
   }
   const clip = useRef<HTMLAudioElement>(null);
+  const current = useRef<HTMLParagraphElement>(null);
   const lines = useMemo(
     () =>
       voice === 'first'
@@ -93,6 +94,15 @@ export function LiveScene({
   }, [playing, auto, line, lineIndex, narrate]);
 
   useEffect(() => () => stopSpeaking(), []);
+
+  useEffect(() => {
+    if (!playing || lineIndex === 0) return;
+    const el = current.current;
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    if (box.top < 80 || box.bottom > window.innerHeight - 120)
+      el.scrollIntoView({ block: 'center', behavior: allowed ? 'smooth' : 'auto' });
+  }, [lineIndex, playing, allowed]);
 
   useEffect(() => {
     const first = latest.current.lines[0];
@@ -164,12 +174,11 @@ export function LiveScene({
             <motion.p
               key={`${scene.memoryId}-${i}`}
               initial={false}
+              ref={i === lineIndex ? current : undefined}
               animate={{
-                opacity: i < lineIndex ? 0.5 : i === lineIndex ? (waiting ? 0.7 : 1) : 0,
-                y: i <= lineIndex ? 0 : 12,
+                opacity: i < lineIndex ? 0.55 : i === lineIndex ? (waiting ? 0.7 : 1) : 0.16,
               }}
               transition={{ duration: allowed ? 1.1 : 0 }}
-              aria-hidden={i > lineIndex}
               className={i === lineIndex ? '[text-shadow:0_0_30px_var(--mood-c)]' : ''}
             >
               {line}

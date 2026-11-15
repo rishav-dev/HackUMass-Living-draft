@@ -34,6 +34,40 @@ interface Draft {
   passphrase: string;
   confirm: string;
   artOnline: boolean;
+  locationMode: 'home' | 'travel' | 'off';
+}
+
+const LOCATION_CHOICES: Array<{ value: Draft['locationMode']; title: string; text: string }> = [
+  {
+    value: 'home',
+    title: 'Share it once',
+    text: 'Your rough area is saved as home, for local weather and time of day. The app never tracks you after that.',
+  },
+  {
+    value: 'travel',
+    title: 'While I’m using the app',
+    text: 'Home stays saved, and when you travel the weather follows where you are. Only checked while the app is open.',
+  },
+  {
+    value: 'off',
+    title: 'Don’t use my location',
+    text: 'Nothing is asked. You can type a town in Settings whenever you like.',
+  },
+];
+
+function roughPosition(): Promise<{ lat: number; lon: number } | null> {
+  if (!('geolocation' in navigator)) return Promise.resolve(null);
+  return new Promise((resolve) =>
+    navigator.geolocation.getCurrentPosition(
+      (p) =>
+        resolve({
+          lat: Math.round(p.coords.latitude * 10) / 10,
+          lon: Math.round(p.coords.longitude * 10) / 10,
+        }),
+      () => resolve(null),
+      { enableHighAccuracy: false, maximumAge: 60 * 60_000, timeout: 15_000 },
+    ),
+  );
 }
 
 export default function OnboardingPage() {
@@ -52,12 +86,18 @@ export default function OnboardingPage() {
     passphrase: '',
     confirm: '',
     artOnline: true,
+    locationMode: 'home',
   });
   const navigate = useNavigate();
   const client = useQueryClient();
   const { play } = useSound();
   const { data: auth } = useAuthStatus();
   const needsPassphrase = !auth?.configured;
+  const [named, setNamed] = useState(false);
+  if (!named && auth?.name && !draft.preferredName) {
+    setNamed(true);
+    setDraft((d) => ({ ...d, preferredName: auth.name ?? '' }));
+  }
   useAtmosphere({
     mood: STEP_MOODS[step] ?? 'cosmos',
     intensity: 0.35 + step * 0.1,
@@ -96,7 +136,10 @@ export default function OnboardingPage() {
         );
         client.setQueryData(authKey, status);
       }
+      const spot = draft.locationMode === 'off' ? null : await roughPosition();
       const profile = await api.post<ProfileDto>('/profile', {
+        locationMode: draft.locationMode,
+        ...(spot ? { placeLat: spot.lat, placeLon: spot.lon, weatherOn: true } : {}),
         preferredName: draft.preferredName.trim(),
         currentAge: ageFromBirth ?? ageNumber,
         birthDate: draft.birthDate || null,
@@ -348,8 +391,8 @@ export default function OnboardingPage() {
                     Memories, photos and recordings live on this computer. No feed, nothing public.
                   </Point>
                   <Point icon={ShieldCheck} tone="text-sage-deep">
-                    Organizing (dates, people, feelings, links) runs locally. Nothing is sent to an
-                    AI service.
+                    The writing helper and narrator run on this computer too. Your memories are not
+                    sent to an AI company.
                   </Point>
                   <Point icon={Mic} tone="text-peach-deep">
                     Live transcription uses your browser's speech service. In Chrome that sends
@@ -361,10 +404,10 @@ export default function OnboardingPage() {
                   <div className="rounded-2xl border border-white/10 bg-abyss/50 p-4">
                     <p className="mb-3 flex items-center gap-2 text-sm font-bold">
                       <KeyRound className="size-4 text-lavender-deep" aria-hidden="true" />
-                      Choose a passphrase to open your archive
+                      Choose a password to open your notebook
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Passphrase" htmlFor="pass" hint="At least 8 characters.">
+                      <Field label="Password" htmlFor="pass" hint="At least 8 characters.">
                         <TextInput
                           id="pass"
                           type="password"
@@ -398,6 +441,34 @@ export default function OnboardingPage() {
                   </div>
                 )}
 
+                <fieldset className="rounded-2xl border border-white/10 bg-abyss/50 p-4">
+                  <legend className="px-1 text-sm font-bold">Can the app use your location?</legend>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {LOCATION_CHOICES.map((choice) => (
+                      <label
+                        key={choice.value}
+                        className={`flex cursor-pointer gap-3 rounded-2xl border p-3 transition ${draft.locationMode === choice.value ? 'border-lavender-deep bg-lavender/15' : 'border-white/10 hover:border-white/25'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="location"
+                          className="mt-1 size-4"
+                          checked={draft.locationMode === choice.value}
+                          onChange={() => set('locationMode', choice.value)}
+                        />
+                        <span>
+                          <span className="block font-semibold">{choice.title}</span>
+                          <span className="text-sm text-ink-soft">{choice.text}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-ink-faint">
+                    Only an area rounded to about 10 km is kept, and it&apos;s only ever sent to the
+                    free Open-Meteo weather service. You can change this in Settings.
+                  </p>
+                </fieldset>
+
                 <div className="rounded-2xl border border-white/10 bg-abyss/50 p-4">
                   <Toggle
                     label="Illustrate my pages"
@@ -417,8 +488,8 @@ export default function OnboardingPage() {
                   Your path is ready, {draft.preferredName.split(' ')[0]}
                 </h1>
                 <p className="text-ink-soft">
-                  {ageFromBirth ?? ageNumber} chapters, from your first year to now. Empty years
-                  aren't missing, they're just waiting. Start anywhere.
+                  {ageFromBirth ?? ageNumber} chapters, from your first year to now. Empty years are
+                  fine. Start anywhere.
                 </p>
                 <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
                   <Button

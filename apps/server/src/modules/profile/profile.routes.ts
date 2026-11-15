@@ -11,7 +11,17 @@ profileRouter.get('/', (_req, res) => {
 
 profileRouter.post('/', (req, res) => {
   if (findProfile()) throw new HttpError(409, 'A profile already exists');
-  res.status(201).json(createProfile(body(req, profileInputSchema)));
+  const input = body(req, profileInputSchema);
+  createProfile(input);
+  const extras = {
+    ...(input.placeName !== undefined ? { placeName: input.placeName } : {}),
+    ...(input.placeLat !== undefined ? { placeLat: input.placeLat } : {}),
+    ...(input.placeLon !== undefined ? { placeLon: input.placeLon } : {}),
+    ...(input.weatherOn !== undefined ? { weatherOn: input.weatherOn } : {}),
+    ...(input.tempUnit !== undefined ? { tempUnit: input.tempUnit } : {}),
+    ...(input.locationMode !== undefined ? { locationMode: input.locationMode } : {}),
+  };
+  res.status(201).json(Object.keys(extras).length ? updateProfile(extras) : findProfile());
 });
 
 profileRouter.patch('/', (req, res) => {

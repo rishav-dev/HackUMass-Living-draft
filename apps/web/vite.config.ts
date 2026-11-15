@@ -11,6 +11,7 @@ const shim = (name: string) => path.join(here, 'src/device/shims', `${name}.ts`)
 export default defineConfig(({ mode }) => {
   const device = mode === 'app';
   return {
+    base: process.env.LIVING_DRAFT_BASE ?? '/',
     plugins: [react(), tailwindcss()],
     define: {
       'import.meta.env.VITE_RUNTIME': JSON.stringify(device ? 'device' : 'server'),

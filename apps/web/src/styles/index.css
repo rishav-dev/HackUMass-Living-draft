@@ -757,6 +757,17 @@ dialog[open] {
     transform: rotate(360deg);
   }
 }
+.map-tip {
+  max-width: 18rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  background: rgb(21 18 25 / 0.95);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  color: var(--color-ink);
+  font:
+    500 0.82rem/1.4 system-ui,
+    sans-serif;
+}
 .impulse {
   position: absolute;
   left: 0;
@@ -848,4 +859,73 @@ dialog[open] {
 }
 :root[data-daypart='night'] {
   --lamp: rgb(255 196 128 / 0.09);
+}
+
+.place-orb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--size);
+  height: var(--size);
+  translate: -50% -50%;
+  border: 0;
+  padding: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  pointer-events: auto;
+  background: radial-gradient(
+    circle at 35% 30%,
+    #fff 0%,
+    var(--tint) 40%,
+    color-mix(in srgb, var(--tint) 45%, #0b0910) 100%
+  );
+  box-shadow:
+    0 0 16px 3px color-mix(in srgb, var(--tint) 75%, transparent),
+    0 0 44px 12px color-mix(in srgb, var(--tint) 28%, transparent);
+  transition:
+    scale 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.place-orb:hover,
+.place-orb:focus-visible {
+  scale: 1.2;
+  outline: none;
+  box-shadow:
+    0 0 20px 5px color-mix(in srgb, var(--tint) 90%, transparent),
+    0 0 60px 18px color-mix(in srgb, var(--tint) 38%, transparent);
+}
+.place-orb-count {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 11px/1 var(--font-sans);
+  color: #0b0910;
+}
+.place-orb-label {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 7px);
+  translate: -50% 0;
+  white-space: nowrap;
+  font: 600 12.5px/1.2 var(--font-sans);
+  color: #f4ede1;
+  text-shadow:
+    0 1px 3px #000,
+    0 0 10px #000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.place-orb[data-show] .place-orb-label,
+.place-orb:hover .place-orb-label,
+.place-orb:focus-visible .place-orb-label {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .place-orb,
+  .place-orb-label {
+    transition: none;
+  }
 }

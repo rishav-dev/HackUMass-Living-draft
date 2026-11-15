@@ -1,3 +1,4 @@
+import { saveUnderstanding } from '../memories/understanding.repository';
 import type {
   AddVersionInput,
   AnalyzeInput,
@@ -323,6 +324,13 @@ export function createMemory(input: CreateMemoryInput): { memoryId: string; vers
     linkMilestones(memoryId, milestoneIds);
     claimMedia(input.mediaIds, 'memory', memoryId, versionId);
     if (input.audioId) claimMedia([input.audioId], 'memory', memoryId, versionId);
+    saveUnderstanding(memoryId, versionId, input.understanding);
+    if (input.place && !input.understanding?.places.length)
+      saveUnderstanding(memoryId, versionId, {
+        themes: [],
+        followups: [],
+        places: [{ name: input.place }],
+      });
     return { memoryId, versionId };
   });
 }
@@ -430,6 +438,7 @@ export function addVersion(memoryId: string, input: AddVersionInput) {
     saveEmotions(memoryId, input.emotions);
     claimMedia(input.mediaIds, 'memory', memoryId, versionId);
     if (input.audioId) claimMedia([input.audioId], 'memory', memoryId, versionId);
+    saveUnderstanding(memoryId, versionId, input.understanding, { replaceThemes: true });
 
     const later = get<VersionRow>('SELECT * FROM memory_versions WHERE id = ?', versionId)!;
     const comparison = compareVersionRows(previous, later);

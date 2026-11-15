@@ -15,13 +15,15 @@
     "preview:app": "npm run preview:app -w @living-draft/web",
     "start": "npm run start -w @living-draft/server",
     "seed": "npm run seed -w @living-draft/server --",
+    "restore-sample": "npm run restore-sample -w @living-draft/server --",
     "art": "npm run art -w @living-draft/server",
     "eval": "npm run eval -w @living-draft/engine",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "serve": "npm run build && npm start"
+    "serve": "npm run build && npm start",
+    "demo:export": "npm run demo:export -w @living-draft/server --"
   },
   "engines": {
     "node": ">=22.13"

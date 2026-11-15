@@ -147,6 +147,27 @@ export function PlaceSection({
             </div>
 
             <div>
+              <p className="mb-2 text-sm font-bold">How the app uses your location</p>
+              <Segmented
+                label="Location"
+                value={profile.locationMode}
+                onChange={(v) => settle({ locationMode: v })}
+                options={[
+                  { value: 'home', label: 'Home only' },
+                  { value: 'travel', label: 'Also where I am now' },
+                  { value: 'off', label: 'Never ask' },
+                ]}
+              />
+              <p className="mt-1.5 text-xs text-ink-soft">
+                {profile.locationMode === 'travel'
+                  ? 'While the app is open, the weather follows where you are. Your home stays as it is.'
+                  : profile.locationMode === 'off'
+                    ? 'The app never asks for your location. Type a town above for weather.'
+                    : 'Weather is always for your home, set once.'}
+              </p>
+            </div>
+
+            <div>
               <p className="mb-2 text-sm font-bold">Temperature</p>
               <Segmented
                 label="Temperature unit"

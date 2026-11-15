@@ -45,7 +45,8 @@ function milestonesAt(archive: Archive, age: number) {
         (m.age_max ?? m.age_min) >= age &&
         (m.age_max ?? m.age_min) - m.age_min <= 2,
     )
-    .map((m) => ({ id: m.id, title: m.title }));
+    .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.title.localeCompare(b.title))
+    .map((m) => ({ id: m.id, title: m.title, date: m.date }));
 }
 
 export function lifePath(): LifePathDto {

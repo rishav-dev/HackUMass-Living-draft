@@ -102,6 +102,33 @@ export function memoryDetail(memoryId: string): MemoryDetailDto {
     ...card,
     readingCopy: archive.text(memoryId),
     place: memory.place,
+    time: memory.time_kind ? { kind: memory.time_kind, hint: memory.time_hint ?? '' } : null,
+    questions: all<{
+      id: string;
+      version_id: string | null;
+      question: string;
+      answer: string | null;
+      asked_at: string;
+      answered_at: string | null;
+    }>('SELECT * FROM memory_questions WHERE memory_id = ? ORDER BY asked_at', memoryId).map(
+      (q) => ({
+        id: q.id,
+        versionId: q.version_id,
+        question: q.question,
+        answer: q.answer,
+        askedAt: q.asked_at,
+        answeredAt: q.answered_at,
+      }),
+    ),
+    themeEvidence: all<{ theme: string; evidence: string | null }>(
+      'SELECT theme, evidence FROM memory_themes WHERE memory_id = ? ORDER BY theme',
+      memoryId,
+    ),
+    placeList: all<{ id: string; name: string; kind: string | null }>(
+      `SELECT p.id, p.name, p.kind FROM memory_places mp JOIN places p ON p.id = mp.place_id
+       WHERE mp.memory_id = ? ORDER BY p.name`,
+      memoryId,
+    ),
     currentVersionId: memory.current_version_id ?? '',
     versions: versions.map((v: VersionRow) => {
       const audio = v.audio_id ? findMedia(v.audio_id) : undefined;

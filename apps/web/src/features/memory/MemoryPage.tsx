@@ -3,14 +3,18 @@ import { Link, useLocation, useParams } from 'react-router';
 import { motion } from 'motion/react';
 import {
   ArrowLeft,
+  ArrowUpRight,
+  Bookmark,
+  BookmarkCheck,
   Clapperboard,
+  Clock3,
   GitCompare,
   History,
   ImagePlus,
   MapPin,
   Mic,
   PenLine,
-  Quote,
+  Repeat,
   SlidersHorizontal,
   Trash2,
   TriangleAlert,
@@ -28,7 +32,7 @@ import { Button, ButtonLink, IconButton } from '../../components/ui/Button';
 import { ErrorState, PaperLoading } from '../../components/ui/states';
 import { useToast } from '../../components/ui/Toast';
 import { formatDate, relativeTime } from '../../lib/format';
-import { connectionMeta, MODE_LABELS } from '../../lib/meta';
+import { connectionMeta, timeSpanLabel } from '../../lib/meta';
 import { hapticMood } from '../../lib/haptics';
 import { EMOTION_TO_MOOD } from '../../lib/mood/moods';
 import { useAtmosphere } from '../../lib/mood/atmosphere';
@@ -44,6 +48,8 @@ import { useDayWeather } from '../../api/weather';
 import { DayWeather } from '../../components/memory/DayWeather';
 import { openPlayback } from '../playback/playbackStore';
 import { DeleteMemoryDialog, EditDetailsDialog, EditTextDialog } from './dialogs';
+import { ExactWords } from './ExactWords';
+import { MemoryPeople } from './MemoryPeople';
 
 export default function MemoryPage() {
   const { id } = useParams();
@@ -59,7 +65,6 @@ function MemoryView({ memory }: { memory: MemoryDetailDto }) {
   const [dialog, setDialog] = useState<'text' | 'details' | 'delete' | null>(() =>
     location.hash === '#placement' ? 'details' : null,
   );
-  const [showOriginal, setShowOriginal] = useState(false);
   const [managing, setManaging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const invalidate = useInvalidateArchive();
@@ -106,9 +111,21 @@ function MemoryView({ memory }: { memory: MemoryDetailDto }) {
   const thenFeelings = memory.emotions.filter((e) => e.phase === 'then');
   const nowFeelings = memory.emotions.filter((e) => e.phase === 'now');
   const uncertain = memory.resolutions.filter((r) => r.resolution === 'mark_uncertain');
-  const current =
-    memory.versions.find((v) => v.id === memory.currentVersionId) ??
-    memory.versions[memory.versions.length - 1];
+
+  const [bookmarked, setBookmarked] = useState(memory.bookmarked);
+  const toggleBookmark = async () => {
+    const next = !bookmarked;
+    setBookmarked(next);
+    try {
+      await api.put(`/memories/${memory.id}/bookmark`, { on: next });
+      invalidate();
+      toast(next ? 'Saved to your bookmarks.' : 'Removed from bookmarks.');
+    } catch {
+      setBookmarked(!next);
+    }
+  };
+  const close = memory.people.filter((p) => p.role !== 'mentioned').slice(0, 2);
+  const changes = memory.connections.filter((c) => c.type === 'relationship_change');
 
   const addFiles = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -141,6 +158,44 @@ function MemoryView({ memory }: { memory: MemoryDetailDto }) {
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-ivory via-ivory/40 to-transparent" />
+        <div className="absolute right-4 top-4 flex max-w-[70%] flex-col items-end gap-2 sm:right-8 sm:top-6">
+          <button
+            type="button"
+            onClick={toggleBookmark}
+            aria-pressed={bookmarked}
+            className="inline-flex items-center gap-1.5 rounded-full bg-paper/88 px-3 py-1.5 text-sm font-semibold hover:bg-paper"
+          >
+            {bookmarked ? (
+              <BookmarkCheck className="size-4 text-gold-deep" />
+            ) : (
+              <Bookmark className="size-4" />
+            )}
+            {bookmarked ? 'Bookmarked' : 'Bookmark'}
+          </button>
+          {close.map((person) => (
+            <Link
+              key={person.characterId}
+              to={`/people/${person.characterId}`}
+              viewTransition
+              className="inline-flex items-center gap-1.5 rounded-full bg-paper/80 px-3 py-1.5 text-xs font-bold hover:bg-paper"
+            >
+              How things went with {person.name} <ArrowUpRight className="size-3.5" />
+            </Link>
+          ))}
+          {changes.map((c) => {
+            const other = c.endpoints.find((e) => e.nodeId !== memory.id);
+            return other ? (
+              <Link
+                key={c.id}
+                to={`/memories/${other.nodeId}`}
+                viewTransition
+                className="inline-flex items-center gap-1.5 rounded-full bg-paper/80 px-3 py-1.5 text-xs font-bold hover:bg-paper"
+              >
+                Relationship change: {other.title} <ArrowUpRight className="size-3.5" />
+              </Link>
+            ) : null;
+          })}
+        </div>
         <div className="absolute left-4 top-4 sm:left-8 sm:top-6">
           <Link
             to={
@@ -160,10 +215,45 @@ function MemoryView({ memory }: { memory: MemoryDetailDto }) {
         <div className="absolute inset-x-0 bottom-0 mx-auto max-w-5xl px-5 pb-6 sm:px-8">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <CertaintyMark temporal={memory.temporal} />
-            {memory.place && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-paper/80 px-2.5 py-0.5 text-xs font-bold">
-                <MapPin className="size-3.5" /> {memory.place}
+            {memory.time && timeSpanLabel(memory.time.kind) && (
+              <span
+                title={memory.time.hint || undefined}
+                className="inline-flex items-center gap-1 rounded-full bg-paper/80 px-2.5 py-0.5 text-xs font-bold"
+              >
+                {memory.time.kind === 'kept happening' ? (
+                  <Repeat className="size-3.5" />
+                ) : (
+                  <Clock3 className="size-3.5" />
+                )}
+                {timeSpanLabel(memory.time.kind)}
+                {memory.time.hint && memory.time.hint.length <= 40 && (
+                  <span className="font-semibold text-ink-soft">· {memory.time.hint}</span>
+                )}
               </span>
+            )}
+            {(memory.placeList.length
+              ? memory.placeList
+              : memory.place
+                ? [{ id: '', name: memory.place, kind: null }]
+                : []
+            ).map((place) =>
+              place.id ? (
+                <Link
+                  key={place.id}
+                  to={`/places/${place.id}`}
+                  viewTransition
+                  className="inline-flex items-center gap-1 rounded-full bg-paper/80 px-2.5 py-0.5 text-xs font-bold hover:bg-paper"
+                >
+                  <MapPin className="size-3.5" /> {place.name}
+                </Link>
+              ) : (
+                <span
+                  key={place.name}
+                  className="inline-flex items-center gap-1 rounded-full bg-paper/80 px-2.5 py-0.5 text-xs font-bold"
+                >
+                  <MapPin className="size-3.5" /> {place.name}
+                </span>
+              ),
             )}
           </div>
           <h1
@@ -172,6 +262,21 @@ function MemoryView({ memory }: { memory: MemoryDetailDto }) {
           >
             {memory.title}
           </h1>
+          {memory.themeEvidence.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {memory.themeEvidence.map((t) => (
+                <Link
+                  key={t.theme}
+                  to={`/threads/${encodeURIComponent(t.theme)}`}
+                  viewTransition
+                  title={t.evidence ?? undefined}
+                  className="rounded-full bg-lavender-deep/85 px-3 py-1 text-xs font-bold text-abyss transition hover:bg-lavender-deep"
+                >
+                  {t.theme}
+                </Link>
+              ))}
+            </div>
+          )}
           <div className="mt-3">
             <PeopleRow people={memory.people} />
           </div>
@@ -278,36 +383,7 @@ function MemoryView({ memory }: { memory: MemoryDetailDto }) {
               />
             </div>
 
-            <div className="mt-8">
-              <button
-                type="button"
-                onClick={() => setShowOriginal((s) => !s)}
-                className="inline-flex items-center gap-2 text-sm font-bold text-lavender-deep hover:underline"
-                aria-expanded={showOriginal}
-              >
-                <Quote className="size-4" />
-                {showOriginal ? 'Hide your exact words' : 'Your exact words'}
-              </button>
-              {showOriginal && current && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-3 rounded-3xl bg-cream/70 p-5"
-                >
-                  <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">
-                    {MODE_LABELS[current.mode] ?? 'Telling'} · {formatDate(current.recordedAt)}
-                  </p>
-                  <p className="mt-2 whitespace-pre-wrap font-display text-lg italic text-ink-soft">
-                    {current.originalText}
-                  </p>
-                  {current.audio && (
-                    <div className="mt-4">
-                      <AudioPlayer media={current.audio} label="As you said it" />
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </div>
+            <ExactWords memory={memory} />
 
             {uncertain.length > 0 && (
               <div className="mt-8 rounded-3xl border-2 border-dashed border-ink/20 p-5">
@@ -371,6 +447,7 @@ function MemoryView({ memory }: { memory: MemoryDetailDto }) {
           </div>
 
           <aside className="flex flex-col gap-6">
+            <MemoryPeople memory={memory} />
             {dayWeather && (
               <DayWeather
                 weather={dayWeather}

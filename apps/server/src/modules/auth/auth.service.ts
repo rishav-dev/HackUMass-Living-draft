@@ -61,28 +61,29 @@ export function verifyPassphrase(passphrase: string): boolean {
   return ok;
 }
 
-export function createSession(res: Response): string {
+export function createSession(res: Response, persistent = true): string {
   const token = randomBytes(32).toString('base64url');
   const timestamp = now();
-  const expires = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
+  const lifetime = persistent ? SESSION_DAYS * 864e5 : 12 * 3600e3;
   run(
-    'INSERT INTO sessions (token_hash, created_at, expires_at, last_seen) VALUES (?, ?, ?, ?)',
+    'INSERT INTO sessions (token_hash, created_at, expires_at, last_seen, persistent) VALUES (?, ?, ?, ?, ?)',
     hashToken(token),
     timestamp,
-    expires,
+    new Date(Date.now() + lifetime).toISOString(),
     timestamp,
+    persistent ? 1 : 0,
   );
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
     secure: false,
     path: '/',
-    maxAge: SESSION_DAYS * 864e5,
+    ...(persistent ? { maxAge: lifetime } : {}),
   });
   return token;
 }
 
-function readCookie(req: Request, name: string): string | null {
+export function readCookie(req: Request, name: string): string | null {
   const header = req.headers.cookie;
   if (!header) return null;
   for (const part of header.split(';')) {

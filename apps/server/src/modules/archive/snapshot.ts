@@ -61,6 +61,8 @@ export class Archive {
   private readonly endpoints: Map<string, EndpointRow[]>;
   private readonly milestoneLinks: Map<string, string[]>;
   private readonly aliasRows: Map<string, string[]>;
+  private readonly themeRows: Map<string, string[]>;
+  private readonly placeRows: Map<string, string[]>;
 
   private constructor() {
     this.profile = requireProfile();
@@ -123,6 +125,26 @@ export class Archive {
           (r) => r.memory_id,
         ),
       ].map(([memoryId, rows]) => [memoryId, rows.map((r) => r.milestone_id)]),
+    );
+    this.themeRows = new Map(
+      [
+        ...groupBy(
+          all<{ memory_id: string; theme: string }>(
+            'SELECT memory_id, theme FROM memory_themes ORDER BY theme',
+          ),
+          (r) => r.memory_id,
+        ),
+      ].map(([id, rows]) => [id, rows.map((r) => r.theme)]),
+    );
+    this.placeRows = new Map(
+      [
+        ...groupBy(
+          all<{ memory_id: string; name: string }>(
+            'SELECT mp.memory_id, p.name FROM memory_places mp JOIN places p ON p.id = mp.place_id',
+          ),
+          (r) => r.memory_id,
+        ),
+      ].map(([id, rows]) => [id, rows.map((r) => r.name)]),
     );
     this.connections = all<ConnectionRow>('SELECT * FROM connections ORDER BY created_at');
     this.endpoints = groupBy(
@@ -272,6 +294,10 @@ export class Archive {
       storyOrder: memory.story_order ?? null,
       createdAt: memory.created_at,
       updatedAt: memory.updated_at,
+      bookmarked: Boolean(memory.bookmarked_at),
+      themes: this.themeRows.get(id) ?? [],
+      places: this.placeRows.get(id) ?? (memory.place ? [memory.place] : []),
+      summary: memory.summary ?? null,
     };
   }
 

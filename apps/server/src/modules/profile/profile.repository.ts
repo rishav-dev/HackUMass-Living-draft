@@ -11,6 +11,9 @@ interface ProfileRow {
   birth_date: string | null;
   gender: string | null;
   pronouns: string | null;
+  full_name?: string | null;
+  sex?: string | null;
+  birth_place?: string | null;
   hemisphere: ProfileDto['hemisphere'];
   date_order: ProfileDto['dateOrder'];
   narrative_voice: ProfileDto['narrativeVoice'];
@@ -28,6 +31,7 @@ interface ProfileRow {
   place_lon: number | null;
   weather_on: number;
   temp_unit: 'auto' | 'c' | 'f';
+  location_mode?: 'home' | 'travel' | 'off';
   is_sample: number;
   created_at: string;
 }
@@ -49,6 +53,9 @@ function toDto(row: ProfileRow): ProfileDto {
     birthDate: row.birth_date,
     gender: row.gender,
     pronouns: row.pronouns,
+    fullName: row.full_name ?? null,
+    sex: row.sex ?? null,
+    birthPlace: row.birth_place ?? null,
     hemisphere: row.hemisphere,
     dateOrder: row.date_order,
     narrativeVoice: row.narrative_voice,
@@ -66,6 +73,7 @@ function toDto(row: ProfileRow): ProfileDto {
     placeLon: row.place_lon,
     weatherOn: !!row.weather_on,
     tempUnit: row.temp_unit ?? 'auto',
+    locationMode: row.location_mode ?? 'home',
     isSample: !!row.is_sample,
     createdAt: row.created_at,
   };
@@ -90,10 +98,10 @@ export function createProfile(
   const timestamp = now();
   const currentAge = input.birthDate ? ageOnDate(input.birthDate, new Date()) : input.currentAge;
   run(
-    `INSERT INTO profile (id, preferred_name, current_age, age_recorded_on, birth_date, gender, pronouns, hemisphere,
-      date_order, narrative_voice, motion, density, keep_audio, sound_effects, ambient_sound, volume, is_sample,
-      created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO profile (id, preferred_name, current_age, age_recorded_on, birth_date, gender, pronouns, full_name,
+      sex, birth_place, place_name, hemisphere, date_order, narrative_voice, motion, density, keep_audio,
+      sound_effects, ambient_sound, volume, is_sample, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     input.preferredName,
     currentAge,
@@ -101,6 +109,10 @@ export function createProfile(
     input.birthDate ?? null,
     input.gender ?? null,
     input.pronouns ?? null,
+    input.fullName ?? null,
+    input.sex ?? null,
+    input.birthPlace ?? null,
+    input.placeName ?? null,
     input.hemisphere ?? 'unknown',
     input.dateOrder ?? 'mdy',
     input.narrativeVoice ?? 'first',
@@ -128,6 +140,9 @@ const COLUMNS: Record<keyof ProfileUpdate, string> = {
   birthDate: 'birth_date',
   gender: 'gender',
   pronouns: 'pronouns',
+  fullName: 'full_name',
+  sex: 'sex',
+  birthPlace: 'birth_place',
   hemisphere: 'hemisphere',
   dateOrder: 'date_order',
   narrativeVoice: 'narrative_voice',
@@ -145,6 +160,7 @@ const COLUMNS: Record<keyof ProfileUpdate, string> = {
   placeLon: 'place_lon',
   weatherOn: 'weather_on',
   tempUnit: 'temp_unit',
+  locationMode: 'location_mode',
 };
 
 export function updateProfile(update: ProfileUpdate): ProfileDto {

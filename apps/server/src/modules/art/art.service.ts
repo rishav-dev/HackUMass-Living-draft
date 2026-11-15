@@ -26,6 +26,23 @@ const LIGHT: Record<string, string> = {
   angry: 'deep red and orange glow, drifting embers, dramatic contrast',
   anxious: 'violet and cyan haze, restless flickering light',
   confused: 'shifting indigo and teal fog, dreamlike distortion',
+  confident: 'clear bright morning light, open horizon',
+  determined: 'strong low sunlight, long shadows, sharp focus',
+  hopeful: 'first light of dawn, soft peach and gold',
+  relieved: 'rain clearing, pale blue sky breaking through',
+  loved: 'soft warm lamplight, rose and amber glow',
+  nervous: 'flickering pale light, cool shadows',
+  scared: 'dim blue shadows, a single small light',
+  frustrated: 'harsh orange light, heavy air',
+  resentful: 'dark crimson dusk, heavy clouds',
+  hurt: 'cold blue dusk, a faint warm light far away',
+  betrayed: 'split light, cold shadow across warm color',
+  lonely: 'wide empty space, a single distant light, night blue',
+  embarrassed: 'flushed pink light, soft blur',
+  guilty: 'grey dusk, low heavy light',
+  regretful: 'fading violet evening light',
+  jealous: 'sickly green tint, sharp contrast',
+  overwhelmed: 'crowded swirling light, stormy grey and violet',
 };
 
 interface ArtRow {
@@ -193,7 +210,7 @@ function countUse() {
   );
 }
 
-async function fetchPaced(prompt: string, seed: number): Promise<Buffer> {
+export async function fetchPaced(prompt: string, seed: number): Promise<Buffer> {
   for (let attempt = 1; ; attempt += 1) {
     const wait = nextSlot - Date.now();
     if (wait > 0) await pause(wait);

@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Select, TextArea, TextInput } from '../../components/ui/controls';
 import { useToast } from '../../components/ui/Toast';
-import { BASE_EMOTION_TAGS, emotionMeta } from '../../lib/meta';
+import { ALL_EMOTION_TAGS, emotionMeta } from '../../lib/meta';
 import { useSpeechRecognition } from '../../lib/speech';
 import { useSound } from '../../lib/sound/SoundProvider';
 
@@ -273,7 +273,7 @@ export function SceneEditor({
               placeholder="tense, tender…"
             />
             <datalist id="scene-moods">
-              {BASE_EMOTION_TAGS.map((tag) => (
+              {ALL_EMOTION_TAGS.map((tag) => (
                 <option key={tag} value={tag}>
                   {emotionMeta(tag).label}
                 </option>

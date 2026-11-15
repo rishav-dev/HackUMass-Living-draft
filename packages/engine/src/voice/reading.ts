@@ -4,8 +4,20 @@ export interface ReadingSegment {
   speed: number;
 }
 
-const SLOW = new Set(['sad', 'disappointed', 'peaceful', 'nostalgic', 'grateful', 'confused']);
-const LIVELY = new Set(['happy', 'excited', 'proud']);
+const SLOW = new Set([
+  'sad',
+  'disappointed',
+  'peaceful',
+  'nostalgic',
+  'grateful',
+  'confused',
+  'hurt',
+  'lonely',
+  'regretful',
+  'guilty',
+  'betrayed',
+]);
+const LIVELY = new Set(['happy', 'excited', 'proud', 'confident', 'hopeful']);
 
 function baseSpeed(mood: string | null | undefined): number {
   if (!mood) return 0.94;

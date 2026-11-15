@@ -242,7 +242,8 @@ export default function AskPage() {
             className="mt-10 text-center eyebrow"
             role="status"
           >
-            Looking through your pages…
+            Reading the memories that matter to this and thinking it through. On this computer that
+            can take a minute or two.
           </motion.p>
         )}
         {ask.data && asked && !ask.isPending && (

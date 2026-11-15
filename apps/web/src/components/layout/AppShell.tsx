@@ -1,13 +1,14 @@
 import { Suspense, useEffect, useRef } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
-  CalendarDays,
+  Bookmark,
   Compass,
   Feather,
   Library,
   Lock,
   Mail,
   Map as MapIcon,
+  MapPin,
   PenLine,
   Search,
   Settings,
@@ -28,16 +29,17 @@ import { warmNarrator } from '../../lib/voice/neural';
 
 const SECTIONS = [
   { to: '/', label: 'Life', icon: Compass, end: true, tab: '#1f1a26' },
-  { to: '/days', label: 'Days', icon: CalendarDays, tab: '#221a22' },
+  { to: '/album', label: 'Album', icon: Library, tab: '#1e1c26' },
   { to: '/people', label: 'People', icon: Users, tab: '#1b1d25' },
+  { to: '/places', label: 'Places', icon: MapPin, tab: '#1c2023' },
   { to: '/map', label: 'Threads', icon: MapIcon, tab: '#1d1f22' },
   { to: '/ask', label: 'Ask', icon: Sparkles, tab: '#231d1d' },
-  { to: '/album', label: 'Album', icon: Library, tab: '#1e1c26' },
+  { to: '/saved', label: 'Saved', icon: Bookmark, tab: '#22201a' },
   { to: '/capsules', label: 'Capsules', icon: Mail, tab: '#1c2023' },
   { to: '/stories', label: 'Stories', icon: Feather, tab: '#221d27' },
 ];
 
-const MOBILE = [SECTIONS[0]!, SECTIONS[1]!, SECTIONS[2]!, SECTIONS[4]!];
+const MOBILE = [SECTIONS[0]!, SECTIONS[1]!, SECTIONS[5]!, SECTIONS[6]!];
 
 function DateLine() {
   const world = useWorld();
@@ -62,6 +64,35 @@ function DateLine() {
         </>
       )}
     </span>
+  );
+}
+
+function HeaderSearch() {
+  const navigate = useNavigate();
+  return (
+    <form
+      role="search"
+      className="mr-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const q = new FormData(e.currentTarget).get('q')?.toString().trim() ?? '';
+        void navigate(q ? `/search?q=${encodeURIComponent(q)}` : '/search');
+      }}
+    >
+      <label className="relative flex items-center">
+        <Search
+          className="pointer-events-none absolute left-3 size-4 text-ink-soft"
+          aria-hidden="true"
+        />
+        <span className="sr-only">Search your memories</span>
+        <input
+          name="q"
+          type="search"
+          placeholder="Search your memories"
+          className="h-9 w-40 rounded-full border border-white/12 bg-white/6 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint transition-[width,border-color] focus:w-64 focus:border-lavender-deep/60 focus:outline-none sm:w-56"
+        />
+      </label>
+    </form>
   );
 }
 
@@ -255,9 +286,7 @@ export function AppShell() {
                   </span>
                 )}
                 <div className="ml-auto flex items-center gap-0.5">
-                  <IconLink to="/search" label="Search the notebook">
-                    <Search className="size-[18px]" />
-                  </IconLink>
+                  <HeaderSearch />
                   <SoundToggle />
                   <LockButton />
                   <IconLink to="/settings" label="Settings and privacy">

@@ -155,7 +155,7 @@ function CharacterView({ person }: { person: CharacterDetailDto }) {
 
         <section className="paper mt-10 rounded-[2rem] p-6" aria-labelledby="journey">
           <h2 id="journey" className="flex items-center gap-2 text-xl font-semibold">
-            <Sparkles className="size-5 text-gold-deep" /> Character journey
+            <Sparkles className="size-5 text-gold-deep" /> How things changed over the years
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
             Answers come only from what you've recorded, and describe how you remember {person.name}

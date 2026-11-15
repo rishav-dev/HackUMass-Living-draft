@@ -7,9 +7,11 @@
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "start": "tsx src/index.ts",
     "seed": "tsx src/seed/run.ts",
+    "restore-sample": "tsx src/seed/restore.ts",
     "art": "tsx src/seed/paint.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:export": "tsx src/seed/export-demo.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
@@ -19,10 +21,13 @@
     "fflate": "^0.8.3",
     "kokoro-js": "^1.2.1",
     "multer": "^2.5.0",
+    "node-llama-cpp": "^3.22.3",
+    "nodemailer": "^6.10.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.3.0"
+    "@types/multer": "^2.3.0",
+    "@types/nodemailer": "^8.0.2"
   }
 }

@@ -6,6 +6,7 @@ import {
   KIN_GROUPS,
   NAME_TITLES,
   NOT_NAMES,
+  PLACE_WORDS,
   ROLE_WORDS,
   SUPPORT_VERBS,
 } from './lexicon';
@@ -122,7 +123,7 @@ function findNames(text: string): RawMention[] {
   for (const match of text.matchAll(titled)) {
     const title = match[1]!;
     const name = match[2]!;
-    if (NOT_NAMES.has(name.toLowerCase())) continue;
+    if (NOT_NAMES.has(name.toLowerCase()) || PLACE_WORDS.has(name.toLowerCase())) continue;
     const start = match.index ?? 0;
     const full = `${capitalizeTitle(title)} ${name}`;
     const spanText = match[0];
@@ -144,7 +145,7 @@ function findNames(text: string): RawMention[] {
     const first = match[1]!;
     const start = match.index ?? 0;
     if (titledSpans.some((t) => start >= t.start && start < t.end)) continue;
-    if (NOT_NAMES.has(first.toLowerCase())) continue;
+    if (NOT_NAMES.has(first.toLowerCase()) || PLACE_WORDS.has(first.toLowerCase())) continue;
     if (
       /\b(?:to|in|from|at|near|through|across|visit|visited|visiting|outside|around|of)\s+$/i.test(
         text.slice(Math.max(0, start - 12), start),

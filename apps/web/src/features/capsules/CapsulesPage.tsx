@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Flag, Mail, Plus, Trash2 } from 'lucide-react';
+import { Flag, Mail, Plus } from 'lucide-react';
 import type { CapsuleDto, MilestoneDto } from '@living-draft/contracts';
 import { api } from '../../api/client';
 import { useCapsules, useInvalidateArchive, useMilestones } from '../../api/hooks';
+import { MilestoneDialog } from '../../components/milestones/MilestoneDialog';
+import { formatMilestoneDate } from '../../lib/format';
 import { Ambience } from '../../components/decor/Ambience';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
-import { TextArea, TextInput } from '../../components/ui/controls';
+import { TextArea } from '../../components/ui/controls';
 import { PaperLoading } from '../../components/ui/states';
 import { useToast } from '../../components/ui/Toast';
 import { formatDate, untilDate } from '../../lib/format';
@@ -235,7 +237,6 @@ function OpenCapsule({ capsule, onClose }: { capsule: CapsuleDto; onClose: () =>
 
 function Milestones({ milestones }: { milestones: MilestoneDto[] }) {
   const [editing, setEditing] = useState<MilestoneDto | 'new' | null>(null);
-  const invalidate = useInvalidateArchive();
   return (
     <section className="mt-20" aria-labelledby="milestones">
       <div className="flex items-end justify-between gap-4">
@@ -271,6 +272,11 @@ function Milestones({ milestones }: { milestones: MilestoneDto[] }) {
               <span className="w-16 font-display text-xl font-semibold text-peach-deep">
                 {m.ageMin ?? '?'}
               </span>
+              {m.date && (
+                <span className="hidden text-xs font-semibold text-ink-soft sm:inline">
+                  {formatMilestoneDate(m.date)}
+                </span>
+              )}
               <span className="flex-1 font-semibold">{m.title}</span>
               <span className="text-sm text-ink-soft">
                 {m.memoryIds.length} {m.memoryIds.length === 1 ? 'memory' : 'memories'}
@@ -282,99 +288,11 @@ function Milestones({ milestones }: { milestones: MilestoneDto[] }) {
       </ol>
       {editing && (
         <MilestoneDialog
+          key={editing === 'new' ? 'new' : editing.id}
           milestone={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={() => {
-            invalidate();
-            setEditing(null);
-          }}
         />
       )}
     </section>
-  );
-}
-
-function MilestoneDialog({
-  milestone,
-  onClose,
-  onSaved,
-}: {
-  milestone: MilestoneDto | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [title, setTitle] = useState(milestone?.title ?? '');
-  const [age, setAge] = useState(milestone?.ageMin?.toString() ?? '');
-  const [description, setDescription] = useState(milestone?.description ?? '');
-  const body = {
-    title: title.trim(),
-    ageMin: age ? Number(age) : null,
-    ageMax: age ? Number(age) : null,
-    description: description.trim() || null,
-    memoryIds: milestone?.memoryIds ?? [],
-  };
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={milestone ? 'Milestone' : 'New milestone'}
-      footer={
-        <>
-          {milestone && (
-            <Button
-              variant="ghost"
-              icon={<Trash2 className="size-4" />}
-              className="mr-auto !text-rose-deep"
-              onClick={async () => {
-                await api.delete(`/milestones/${milestone.id}`);
-                onSaved();
-              }}
-            >
-              Delete
-            </Button>
-          )}
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!title.trim()}
-            onClick={async () => {
-              if (milestone) await api.put(`/milestones/${milestone.id}`, body);
-              else await api.post('/milestones', body);
-              onSaved();
-            }}
-          >
-            Save
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-bold">What happened</span>
-          <TextInput
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="We moved to the house on Elm Street"
-            autoFocus
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-bold">
-            How old were you? (roughly is fine)
-          </span>
-          <TextInput
-            inputMode="numeric"
-            value={age}
-            onChange={(e) => setAge(e.target.value.replace(/\D/g, ''))}
-            className="w-28"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-bold">Notes</span>
-          <TextArea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </label>
-      </div>
-    </Dialog>
   );
 }

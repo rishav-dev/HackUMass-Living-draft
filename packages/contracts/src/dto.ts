@@ -11,6 +11,9 @@ export interface ProfileDto {
   birthDate: string | null;
   gender: string | null;
   pronouns: string | null;
+  fullName: string | null;
+  sex: string | null;
+  birthPlace: string | null;
   hemisphere: 'north' | 'south' | 'none' | 'unknown';
   dateOrder: 'mdy' | 'dmy';
   narrativeVoice: 'first' | 'third';
@@ -28,6 +31,7 @@ export interface ProfileDto {
   placeLon: number | null;
   weatherOn: boolean;
   tempUnit: 'auto' | 'c' | 'f';
+  locationMode: 'home' | 'travel' | 'off';
   isSample: boolean;
   createdAt: string;
 }
@@ -101,6 +105,19 @@ export interface MemoryCardDto {
   storyOrder: number | null;
   createdAt: string;
   updatedAt: string;
+  bookmarked: boolean;
+  themes: string[];
+  places: string[];
+  summary: string | null;
+}
+
+export interface MemoryQuestionDto {
+  id: string;
+  versionId: string | null;
+  question: string;
+  answer: string | null;
+  askedAt: string;
+  answeredAt: string | null;
 }
 
 export interface MemoryVersionDto {
@@ -226,6 +243,7 @@ export interface VersionComparisonDto {
 export interface MilestoneRefDto {
   id: string;
   title: string;
+  date?: string | null;
 }
 
 export interface ReflectionDto {
@@ -246,6 +264,10 @@ export interface ReviewItemDto extends DetailChangeDto {
 export interface MemoryDetailDto extends MemoryCardDto {
   readingCopy: string;
   place: string | null;
+  time: { kind: string; hint: string } | null;
+  questions: MemoryQuestionDto[];
+  themeEvidence: Array<{ theme: string; evidence: string | null }>;
+  placeList: Array<{ id: string; name: string; kind: string | null }>;
   currentVersionId: string;
   versions: MemoryVersionDto[];
   mentions: MentionDto[];
@@ -440,6 +462,7 @@ export interface MilestoneDto {
   ageMin: number | null;
   ageMax: number | null;
   year: number | null;
+  date: string | null;
   description: string | null;
   memoryIds: string[];
 }
@@ -620,4 +643,73 @@ export interface VoiceStatusDto {
   progress: number;
   downloaded: boolean;
   reason: string | null;
+}
+
+export interface AiStatusDto {
+  status: 'idle' | 'loading' | 'ready' | 'failed';
+  progress: number;
+  downloaded: boolean;
+  reason: string | null;
+  model: string | null;
+  where: 'local' | 'remote' | 'browser' | 'none';
+  sizeLabel: string | null;
+  gpu: string | null;
+}
+
+export interface AiNotesDto {
+  title: string;
+  summary: string;
+  time: { kind: string; hint: string };
+  feelings: Array<{ feeling: string; when: 'at the time' | 'looking back'; because: string }>;
+  milestone: { isMilestone: boolean; title: string };
+  people: Array<{
+    mentionedAs: string;
+    name: string;
+    describedAs: string;
+    role: Role;
+    relationTo: string;
+    relationship: string;
+    why: string;
+  }>;
+  places: Array<{ name: string; kind: string }>;
+  themes: Array<{ theme: string; because: string }>;
+  questions: string[];
+}
+
+export interface AiJobDto {
+  id: string;
+  status: 'working' | 'done' | 'failed';
+  stage: 'waiting' | 'notes' | 'narrative' | 'done';
+  notes: AiNotesDto | null;
+  narrative: string | null;
+  draft: string | null;
+  result: unknown;
+  error: string | null;
+}
+
+export interface CompareInsightDto {
+  headline: string;
+  observations: Array<{
+    kind: 'alike' | 'different' | 'changed' | 'reading';
+    basis: 'shown' | 'suggested';
+    text: string;
+    memoryIds: string[];
+  }>;
+  caveat: string;
+  memoryIds: string[];
+}
+
+export interface AuthStatusDto {
+  configured: boolean;
+  authenticated: boolean;
+  email: string | null;
+  name: string | null;
+  verified: boolean;
+  hasEmail: boolean;
+  totpEnabled: boolean;
+  googleLinked: boolean;
+  methods: { email: boolean; google: boolean; totp: boolean };
+  mailer: 'smtp' | 'outbox' | 'none';
+  demo: boolean;
+  twoStep: boolean;
 }

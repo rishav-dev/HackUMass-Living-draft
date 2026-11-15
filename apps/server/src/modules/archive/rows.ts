@@ -11,6 +11,10 @@ export interface MemoryRow {
   story_order: number | null;
   created_at: string;
   updated_at: string;
+  summary?: string | null;
+  time_kind?: string | null;
+  time_hint?: string | null;
+  bookmarked_at?: string | null;
 }
 
 export interface VersionRow {
@@ -98,6 +102,7 @@ export interface MilestoneRow {
   age_min: number | null;
   age_max: number | null;
   year: number | null;
+  date: string | null;
   description: string | null;
   created_at: string;
 }

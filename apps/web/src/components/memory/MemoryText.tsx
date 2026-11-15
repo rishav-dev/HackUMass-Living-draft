@@ -94,14 +94,18 @@ export function MemoryText({
         return (
           <p key={paragraph.start} className={dropCap && p === 0 ? 'drop-cap' : ''}>
             {sentences.map((sentence, i) => {
-              const delay = sentenceIndex++ * 0.18;
+              const order = sentenceIndex++;
               const content = renderRange(text, sentence.start, sentence.end, marks);
-              return reveal ? (
+              return reveal && order < 6 ? (
                 <motion.span
                   key={sentence.start}
-                  initial={{ opacity: 0, filter: 'blur(4px)' }}
-                  animate={{ opacity: 1, filter: 'blur(0px)' }}
-                  transition={{ delay: 0.25 + delay, duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{
+                    delay: 0.15 + order * 0.1,
+                    duration: 0.6,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
                 >
                   {content}
                   {i < sentences.length - 1 ? ' ' : ''}

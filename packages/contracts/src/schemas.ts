@@ -32,6 +32,9 @@ export const profileInputSchema = z.object({
     .optional(),
   gender: optionalText,
   pronouns: optionalText,
+  fullName: optionalText,
+  sex: optionalText,
+  birthPlace: optionalText,
   hemisphere: hemisphereSchema.optional(),
   dateOrder: z.enum(['mdy', 'dmy']).optional(),
   narrativeVoice: z.enum(['first', 'third']).optional(),
@@ -49,6 +52,7 @@ export const profileInputSchema = z.object({
   placeLon: z.number().min(-180).max(180).nullable().optional(),
   weatherOn: z.boolean().optional(),
   tempUnit: z.enum(['auto', 'c', 'f']).optional(),
+  locationMode: z.enum(['home', 'travel', 'off']).optional(),
 });
 export type ProfileInput = z.infer<typeof profileInputSchema>;
 
@@ -56,11 +60,18 @@ export const profileUpdateSchema = profileInputSchema.partial();
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;
 
 export const analyzeSchema = z.object({
-  text: z.string().trim().min(1).max(20000),
+  text: z.string().trim().min(1).max(60000),
   kind: captureKindSchema.default('memory'),
   memoryId: z.string().optional(),
 });
 export type AnalyzeInput = z.infer<typeof analyzeSchema>;
+
+const clipped = (limit: number) =>
+  z
+    .string()
+    .transform((value) =>
+      value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}…` : value,
+    );
 
 export const evidenceSchema = z.object({
   quote: z.string(),
@@ -79,7 +90,7 @@ export const temporalInputSchema = z.object({
   season: seasonSchema.nullable(),
   approximate: z.boolean(),
   confidence: z.enum(['high', 'medium', 'low']),
-  explanation: z.string().max(2000).default(''),
+  explanation: clipped(2000).default(''),
   evidence: z.array(evidenceSchema).default([]),
   confirmed: z.boolean().default(true),
 });
@@ -91,7 +102,7 @@ export const personDecisionSchema = z.object({
   characterId: z.string().nullable(),
   relationship: z.string().trim().max(60).nullable().optional(),
   role: roleSchema,
-  roleEvidence: z.string().max(1000).optional(),
+  roleEvidence: clipped(400).optional(),
   addAlias: z.boolean().default(true),
 });
 export type PersonDecision = z.infer<typeof personDecisionSchema>;
@@ -100,7 +111,7 @@ export const emotionInputSchema = z.object({
   tag: z.string().trim().min(1).max(40),
   phase: phaseSchema,
   source: z.enum(['suggested', 'user']),
-  evidence: z.string().max(1000).nullable().optional(),
+  evidence: clipped(400).nullable().optional(),
 });
 export type EmotionInput = z.infer<typeof emotionInputSchema>;
 
@@ -113,10 +124,45 @@ export const captureContextSchema = z.object({
   place: z.string().max(160).nullable(),
 });
 
+export const understandingInputSchema = z.object({
+  summary: z.string().trim().max(400).nullable().optional(),
+  time: z
+    .object({ kind: z.string().trim().max(40), hint: z.string().trim().max(120) })
+    .nullable()
+    .optional(),
+  themes: z
+    .array(
+      z.object({
+        theme: z.string().trim().min(1).max(60),
+        evidence: clipped(300).nullable().optional(),
+      }),
+    )
+    .max(8)
+    .default([]),
+  followups: z
+    .array(
+      z.object({
+        question: z.string().trim().min(1).max(400),
+        answer: z.string().trim().max(8000).nullable().optional(),
+      }),
+    )
+    .max(12)
+    .default([]),
+  places: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(120),
+        kind: z.string().trim().max(40).nullable().optional(),
+      }),
+    )
+    .max(10)
+    .default([]),
+});
+
 export const createMemorySchema = z.object({
   title: z.string().trim().min(1).max(160),
-  originalText: z.string().trim().min(1).max(20000),
-  readingCopy: z.string().trim().min(1).max(20000),
+  originalText: z.string().trim().min(1).max(60000),
+  readingCopy: z.string().trim().min(1).max(60000),
   sourceKind: sourceKindSchema,
   temporal: temporalInputSchema,
   people: z.array(personDecisionSchema).default([]),
@@ -136,12 +182,14 @@ export const createMemorySchema = z.object({
   audioId: z.string().nullable().optional(),
   sensitive: z.boolean().default(false),
   context: captureContextSchema.optional(),
+  understanding: understandingInputSchema.optional(),
 });
 export type CreateMemoryInput = z.infer<typeof createMemorySchema>;
+export type UnderstandingInput = z.infer<typeof understandingInputSchema>;
 
 export const addVersionSchema = z.object({
-  originalText: z.string().trim().min(1).max(20000),
-  readingCopy: z.string().trim().min(1).max(20000),
+  originalText: z.string().trim().min(1).max(60000),
+  readingCopy: z.string().trim().min(1).max(60000),
   sourceKind: z.enum(['speech', 'typing']),
   mode: z.enum(['addition', 'retelling', 'correction', 'edit']),
   people: z.array(personDecisionSchema).default([]),
@@ -150,6 +198,7 @@ export const addVersionSchema = z.object({
   audioId: z.string().nullable().optional(),
   note: z.string().max(500).nullable().optional(),
   context: captureContextSchema.optional(),
+  understanding: understandingInputSchema.optional(),
 });
 export type AddVersionInput = z.infer<typeof addVersionSchema>;
 
@@ -271,6 +320,11 @@ export const milestoneInputSchema = z.object({
   ageMin: z.number().int().min(0).max(130).nullable(),
   ageMax: z.number().int().min(0).max(130).nullable(),
   year: z.number().int().nullable().optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Use a full date or a month and year.')
+    .nullable()
+    .optional(),
   description: z.string().max(1000).nullable().optional(),
   memoryIds: z.array(z.string()).default([]),
 });
@@ -278,8 +332,8 @@ export type MilestoneInput = z.infer<typeof milestoneInputSchema>;
 
 export const capsuleInputSchema = z.object({
   title: z.string().trim().min(1).max(160),
-  originalText: z.string().trim().min(1).max(20000),
-  readingCopy: z.string().trim().min(1).max(20000),
+  originalText: z.string().trim().min(1).max(60000),
+  readingCopy: z.string().trim().min(1).max(60000),
   unlockKind: z.enum(['date', 'milestone']),
   unlockDate: z
     .string()
@@ -297,8 +351,8 @@ export const openCapsuleSchema = z.object({
 });
 
 export const reflectionInputSchema = z.object({
-  originalText: z.string().trim().min(1).max(20000),
-  readingCopy: z.string().trim().min(1).max(20000),
+  originalText: z.string().trim().min(1).max(60000),
+  readingCopy: z.string().trim().min(1).max(60000),
   memoryIds: z.array(z.string()).default([]),
   audioId: z.string().nullable().optional(),
 });
@@ -426,4 +480,14 @@ export const voiceRequestSchema = z.object({
   text: z.string().trim().min(1).max(700),
   voice: z.enum(NARRATOR_VOICE_IDS),
   speed: z.number().min(0.5).max(1.5),
+});
+
+export const understandSchema = z.object({
+  text: z.string().trim().min(1).max(40000),
+  memoryId: z.string().optional(),
+  answers: z
+    .array(z.object({ question: z.string().max(400), answer: z.string().max(8000) }))
+    .max(12)
+    .default([]),
+  notes: z.boolean().default(true),
 });

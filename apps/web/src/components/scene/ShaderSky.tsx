@@ -209,7 +209,12 @@ export function ShaderSky({
     let lastDraw = 0;
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
-      if (now - lastDraw < 40 || (fixed && overlays > 0)) return;
+      if (
+        now - lastDraw < 40 ||
+        (fixed && overlays > 0) ||
+        (fixed && document.documentElement.dataset.sky === 'off')
+      )
+        return;
       lastDraw = now;
       const dt = Math.min(0.08, (now - last) / 1000);
       last = now;

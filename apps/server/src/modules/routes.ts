@@ -28,6 +28,9 @@ import { badRequest, body, param } from '../lib/http';
 import { deleteEverything, exportArchive } from './archive/archive.service';
 import { artStatus, declineArt, findArt, requestArt } from './art/art.service';
 import { authRouter, requireSession } from './auth/auth.routes';
+import { aiRouter } from './ai/ai.routes';
+import { devicesRouter } from './devices/devices.routes';
+import { savedRouter } from './saved/saved.routes';
 import { recapFor } from './story/recap.service';
 import { chapterShareHtml } from './story/share.service';
 import { storyRouter } from './stories/story.routes';
@@ -87,6 +90,9 @@ export function apiRouter(): Router {
   api.get('/health', (_req, res) => res.json({ ok: true }));
   api.use('/auth', authRouter);
   api.use(requireSession);
+  api.use('/ai', aiRouter);
+  api.use(savedRouter);
+  api.use(devicesRouter);
   api.use('/profile', profileRouter);
   api.use('/memories', memoryRouter);
   api.use('/characters', characterRouter);
@@ -120,7 +126,15 @@ export function apiRouter(): Router {
     const input = body(req, recapRequestSchema);
     res.json(recapFor(input.focusPeople, input.label, input.memoryIds, input.includeQuiet));
   });
-  api.get('/weather/now', async (_req, res) => res.json(await weatherNow()));
+  api.get('/weather/now', async (req, res) => {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    const here =
+      Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+        ? { lat, lon }
+        : null;
+    res.json(await weatherNow(here));
+  });
   api.get('/weather/memory/:id', async (req, res) => res.json(await dayWeather(param(req, 'id'))));
   api.get('/places', async (req, res) =>
     res.json(await searchPlaces(typeof req.query.q === 'string' ? req.query.q.slice(0, 80) : '')),

@@ -26,7 +26,7 @@ describe('collectionRecap', () => {
       includeQuiet: false,
     });
     expect(lines[0]).toBe('With Mom: three memories, from age 8 to 21.');
-    expect(lines.join(' ')).toContain('Nothing is recorded for ages 9–11 and 13–20');
+    expect(lines.join(' ')).toContain('Nothing is recorded yet for ages 9–11 and 13–20');
     expect(lines.join(' ')).toContain('Mom (three memories)');
     expect(lines.join(' ')).toContain('grateful');
   });
